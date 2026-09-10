@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- headless-tree generics from upstream reui registry */
+
 import type { ButtonHTMLAttributes, CSSProperties, HTMLAttributes } from "react"
 import { createContext, Fragment, useContext } from "react"
 import type { ItemInstance } from "@headless-tree/core"
