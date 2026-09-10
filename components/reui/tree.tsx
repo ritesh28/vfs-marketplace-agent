@@ -88,58 +88,80 @@ function TreeItem<T = any>({
   className,
   asChild = false,
   children,
+  onClick,
+  onMouseDown,
+  style,
   ...props
 }: TreeItemProps<T>) {
   const parentContext = useTreeContext<T>()
   const { indent } = parentContext
 
-  const itemProps = typeof item.getProps === "function" ? item.getProps() : {}
-  const mergedProps = { ...props, children, ...itemProps }
-
-  // Extract style from mergedProps to merge with our custom styles
-  const { style: propStyle, ...otherProps } = mergedProps
+  const itemProps =
+    typeof item.getProps === "function" ? item.getProps() : ({} as Record<string, unknown>)
+  const {
+    onClick: itemOnClick,
+    onMouseDown: itemOnMouseDown,
+    style: itemStyle,
+    className: itemClassName,
+    ...restItemProps
+  } = itemProps as ButtonHTMLAttributes<HTMLButtonElement>
 
   // Merge styles
   const mergedStyle = {
-    ...propStyle,
+    ...itemStyle,
+    ...style,
     "--tree-padding": `${item.getItemMeta().level * indent}px`,
   } as CSSProperties
-
-  const defaultProps = {
-    "data-slot": "tree-item",
-    style: mergedStyle,
-    className: cn(
-      "z-10 ps-(--tree-padding) outline-hidden select-none not-last:pb-0.5 focus:z-20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      className
-    ),
-    "data-focus":
-      typeof item.isFocused === "function"
-        ? item.isFocused() || false
-        : undefined,
-    "data-folder":
-      typeof item.isFolder === "function"
-        ? item.isFolder() || false
-        : undefined,
-    "data-selected":
-      typeof item.isSelected === "function"
-        ? item.isSelected() || false
-        : undefined,
-    "data-drag-target":
-      typeof item.isDragTarget === "function"
-        ? item.isDragTarget() || false
-        : undefined,
-    "data-search-match":
-      typeof item.isMatchingSearch === "function"
-        ? item.isMatchingSearch() || false
-        : undefined,
-    "aria-expanded": item.isExpanded(),
-  }
 
   const Comp = asChild ? Slot.Root : "button"
 
   return (
     <TreeContext.Provider value={{ ...parentContext, currentItem: item }}>
-      <Comp {...defaultProps} {...otherProps}>
+      <Comp
+        {...restItemProps}
+        {...props}
+        data-slot="tree-item"
+        style={mergedStyle}
+        className={cn(
+          "z-10 ps-(--tree-padding) outline-hidden select-none not-last:pb-0.5 focus:z-20 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+          itemClassName,
+          className
+        )}
+        data-focus={
+          typeof item.isFocused === "function"
+            ? item.isFocused() || false
+            : undefined
+        }
+        data-folder={
+          typeof item.isFolder === "function"
+            ? item.isFolder() || false
+            : undefined
+        }
+        data-selected={
+          typeof item.isSelected === "function"
+            ? item.isSelected() || false
+            : undefined
+        }
+        data-drag-target={
+          typeof item.isDragTarget === "function"
+            ? item.isDragTarget() || false
+            : undefined
+        }
+        data-search-match={
+          typeof item.isMatchingSearch === "function"
+            ? item.isMatchingSearch() || false
+            : undefined
+        }
+        aria-expanded={item.isExpanded()}
+        onMouseDown={(event) => {
+          itemOnMouseDown?.(event)
+          onMouseDown?.(event)
+        }}
+        onClick={(event) => {
+          itemOnClick?.(event)
+          onClick?.(event)
+        }}
+      >
         {children}
       </Comp>
     </TreeContext.Provider>
