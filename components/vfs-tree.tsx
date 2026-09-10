@@ -18,7 +18,14 @@ interface FileItem {
   name: string;
   children?: string[];
   type?: "folder" | "json";
+  content?: string;
+  path?: string;
 }
+
+export type VfsFilePreview = {
+  path: string;
+  content: string;
+};
 
 // Phase 1: static mock. Phase 4+: feed from lazy VFS list API / store.
 const items: Record<string, FileItem> = {
@@ -40,6 +47,12 @@ const items: Record<string, FileItem> = {
   "seller-1-profile": {
     name: "profile.json",
     type: "json",
+    path: "marketplace/sellers/s0000000-0000-4000-8000-000000000001/profile.json",
+    content: JSON.stringify(
+      { name: "Sam Seller", emailId: "sam@sellers.example" },
+      null,
+      2,
+    ),
   },
   "seller-1-products": {
     name: "products",
@@ -49,6 +62,17 @@ const items: Record<string, FileItem> = {
   "product-1": {
     name: "p0000000-0000-4000-8000-000000000001.json",
     type: "json",
+    path: "marketplace/sellers/s0000000-0000-4000-8000-000000000001/products/p0000000-0000-4000-8000-000000000001.json",
+    content: JSON.stringify(
+      {
+        name: "Canvas Tote",
+        category: "bags",
+        quantity: 24,
+        metadata: { color: "olive" },
+      },
+      null,
+      2,
+    ),
   },
   customers: {
     name: "customers",
@@ -63,6 +87,12 @@ const items: Record<string, FileItem> = {
   "customer-1-profile": {
     name: "profile.json",
     type: "json",
+    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/profile.json",
+    content: JSON.stringify(
+      { name: "Ava Customer", emailId: "ava@customers.example" },
+      null,
+      2,
+    ),
   },
   "customer-1-orders": {
     name: "orders",
@@ -72,6 +102,23 @@ const items: Record<string, FileItem> = {
   "order-1": {
     name: "o0000000-0000-4000-8000-000000000001.json",
     type: "json",
+    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/orders/o0000000-0000-4000-8000-000000000001.json",
+    content: JSON.stringify(
+      {
+        date: "2026-09-01",
+        items: [
+          {
+            "item-id": "p0000000-0000-4000-8000-000000000001",
+            price: 42,
+            quantity: 1,
+          },
+        ],
+        totalCost: 42,
+        status: "shipped",
+      },
+      null,
+      2,
+    ),
   },
   "customer-1-support": {
     name: "support",
@@ -81,12 +128,30 @@ const items: Record<string, FileItem> = {
   "ticket-1": {
     name: "t0000000-0000-4000-8000-000000000001.json",
     type: "json",
+    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/support/t0000000-0000-4000-8000-000000000001.json",
+    content: JSON.stringify(
+      {
+        "customer-id": "c0000000-0000-4000-8000-000000000001",
+        "order-id": "o0000000-0000-4000-8000-000000000001",
+        "list-of-messages": [
+          { from: "customer", body: "My tote never arrived." },
+          { from: "support", body: "Looking into the shipment now." },
+        ],
+        status: "in-progress",
+      },
+      null,
+      2,
+    ),
   },
 };
 
 const indent = 20;
 
-export function VfsTree() {
+export function VfsTree({
+  onFileOpen,
+}: {
+  onFileOpen?: (preview: VfsFilePreview) => void;
+}) {
   const tree = useTree<FileItem>({
     initialState: {
       expandedItems: ["root", "sellers", "customers"],
@@ -111,7 +176,28 @@ export function VfsTree() {
         const isJson = data.type === "json" || data.name.endsWith(".json");
 
         return (
-          <TreeItem key={item.getId()} item={item}>
+          <TreeItem
+            key={item.getId()}
+            item={item}
+            onClick={(event) => {
+              if (isFolder || !data.content) {
+                return;
+              }
+
+              // Keep the open handler from being cleared by the panel dismiss listener.
+              event.stopPropagation();
+              onFileOpen?.({
+                path: data.path ?? data.name,
+                content: data.content,
+              });
+            }}
+            onMouseDown={(event) => {
+              if (isFolder || !data.content) {
+                return;
+              }
+              event.stopPropagation();
+            }}
+          >
             <TreeItemLabel>
               <span className="flex items-center gap-2">
                 {isFolder ? (
