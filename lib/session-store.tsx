@@ -7,14 +7,12 @@ import {
   type ReactNode,
 } from "react";
 
-import { SUPPORT_USER_ID } from "@/lib/seed/ids";
 import type { Role, SessionSelection } from "@/lib/types";
 
 type SessionStoreValue = SessionSelection & {
   setRole: (role: Role | null) => void;
   setPersonaId: (personaId: string | null) => void;
   setTicketId: (ticketId: string | null) => void;
-  supportPersonaId: string;
 };
 
 const SessionStoreContext = createContext<SessionStoreValue | null>(null);
@@ -31,28 +29,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function setRole(role: Role | null) {
     setSelection({
       role,
-      personaId: role === "support" ? SUPPORT_USER_ID : null,
+      personaId: null,
       ticketId: null,
     });
   }
 
   function setPersonaId(personaId: string | null) {
     setSelection((current) => {
-      if (current.role === "support") {
+      if (current.personaId === personaId) {
         return current;
       }
 
       return {
         ...current,
         personaId,
-        ticketId: null,
+        ticketId: current.role === "support" ? current.ticketId : null,
       };
     });
   }
 
   function setTicketId(ticketId: string | null) {
     setSelection((current) => {
-      if (current.role !== "support") {
+      if (current.role !== "support" || current.ticketId === ticketId) {
         return current;
       }
 
@@ -70,7 +68,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setRole,
         setPersonaId,
         setTicketId,
-        supportPersonaId: SUPPORT_USER_ID,
       }}
     >
       {children}
@@ -87,5 +84,3 @@ export function useSessionStore() {
 
   return context;
 }
-
-export { SUPPORT_USER_ID as SUPPORT_PERSONA_ID };

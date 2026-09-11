@@ -19,7 +19,6 @@ export function PersonaPicker() {
     role,
     personaId,
     ticketId,
-    supportPersonaId,
     setRole,
     setPersonaId,
     setTicketId,
@@ -58,7 +57,13 @@ export function PersonaPicker() {
         }
 
         if (!cancelled) {
-          setPersonas(Array.isArray(data) ? data : []);
+          const next = Array.isArray(data) ? data : [];
+          setPersonas(next);
+
+          // Support has a single DB persona — auto-select from API, not seed IDs.
+          if (role === "support" && next[0]) {
+            setPersonaId(next[0].id);
+          }
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -81,6 +86,8 @@ export function PersonaPicker() {
     return () => {
       cancelled = true;
     };
+    // setPersonaId is stable enough for this effect; role is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   useEffect(() => {
@@ -135,8 +142,7 @@ export function PersonaPicker() {
     };
   }, [role]);
 
-  const supportPersona =
-    personas.find((persona) => persona.id === supportPersonaId) ?? personas[0];
+  const supportPersona = personas[0];
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
@@ -158,10 +164,7 @@ export function PersonaPicker() {
 
       {role === "support" ? (
         <>
-          <Select
-            value={supportPersona?.id ?? supportPersonaId}
-            disabled
-          >
+          <Select value={personaId ?? supportPersona?.id} disabled>
             <SelectTrigger
               size="sm"
               className="w-[180px]"
@@ -176,9 +179,7 @@ export function PersonaPicker() {
                 <SelectItem value={supportPersona.id}>
                   {supportPersona.name}
                 </SelectItem>
-              ) : (
-                <SelectItem value={supportPersonaId}>Support</SelectItem>
-              )}
+              ) : null}
             </SelectContent>
           </Select>
           <Select

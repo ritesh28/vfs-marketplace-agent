@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 
+import { ThemeProvider } from "@/components/theme-provider";
 import { SessionProvider } from "@/lib/session-store";
 
 import "./globals.css";
@@ -26,8 +27,6 @@ export const metadata: Metadata = {
   description: "In-memory VFS tools for a marketplace AI agent",
 };
 
-const themeInitScript = `(function(){try{var k='vfs-marketplace:theme';var t=localStorage.getItem(k);if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}document.documentElement.classList.toggle('dark',t==='dark')}catch(e){}})();`;
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -35,13 +34,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} antialiased`}
       >
-        <SessionProvider>{children}</SessionProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SessionProvider>{children}</SessionProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
