@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -165,38 +164,36 @@ export function DatabaseTab() {
             {table ? "No rows in this table." : "Select a table."}
           </div>
         ) : (
-          <ScrollArea className="h-full">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-max border-collapse text-left text-xs">
-                <thead className="bg-muted sticky top-0">
-                  <tr>
+          <div className="h-full overflow-auto">
+            <table className="w-max min-w-full border-collapse text-left text-xs">
+              <thead className="bg-muted sticky top-0 z-10">
+                <tr>
+                  {columns.map((column) => (
+                    <th
+                      key={column}
+                      className="border-b px-2 py-1.5 font-medium whitespace-nowrap"
+                    >
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={index} className="odd:bg-background even:bg-muted/40">
                     {columns.map((column) => (
-                      <th
+                      <td
                         key={column}
-                        className="border-b px-2 py-1.5 font-medium whitespace-nowrap"
+                        className="border-b px-2 py-1.5 align-top font-mono whitespace-nowrap"
                       >
-                        {column}
-                      </th>
+                        {formatCell(row[column])}
+                      </td>
                     ))}
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={index} className="odd:bg-background even:bg-muted/40">
-                      {columns.map((column) => (
-                        <td
-                          key={column}
-                          className="border-b px-2 py-1.5 align-top font-mono whitespace-nowrap"
-                        >
-                          {formatCell(row[column])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ScrollArea>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
