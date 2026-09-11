@@ -8,15 +8,17 @@ export type SessionSelection = {
   ticketId: string | null;
 };
 
-export type PersonaStub = {
+/** Persona list item from GET /api/personas?role= */
+export type Persona = {
   id: string;
   name: string;
-  role: Role;
 };
 
-export type TicketStub = {
+/** Ticket list item from GET /api/tickets */
+export type TicketSummary = {
   id: string;
   label: string;
   customerId: string;
   orderId: string;
+  status: "open" | "in-progress" | "resolved";
 };

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import {
   Select,
   SelectContent,
@@ -7,65 +9,134 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SUPPORT_PERSONA_ID, useSessionStore } from "@/lib/session-store";
-import type { PersonaStub, Role, TicketStub } from "@/lib/types";
-
-const MOCK_PERSONAS: PersonaStub[] = [
-  {
-    id: "c0000000-0000-4000-8000-000000000001",
-    name: "Ava Customer",
-    role: "customer",
-  },
-  {
-    id: "c0000000-0000-4000-8000-000000000002",
-    name: "Ben Buyer",
-    role: "customer",
-  },
-  {
-    id: "s0000000-0000-4000-8000-000000000001",
-    name: "Sam Seller",
-    role: "seller",
-  },
-  {
-    id: "s0000000-0000-4000-8000-000000000002",
-    name: "Rita Retail",
-    role: "seller",
-  },
-  {
-    id: SUPPORT_PERSONA_ID,
-    name: "Casey Support",
-    role: "support",
-  },
-];
-
-const MOCK_TICKETS: TicketStub[] = [
-  {
-    id: "t0000000-0000-4000-8000-000000000001",
-    label: "Missing item — order #1",
-    customerId: "c0000000-0000-4000-8000-000000000001",
-    orderId: "o0000000-0000-4000-8000-000000000001",
-  },
-  {
-    id: "t0000000-0000-4000-8000-000000000002",
-    label: "Late delivery — order #2",
-    customerId: "c0000000-0000-4000-8000-000000000001",
-    orderId: "o0000000-0000-4000-8000-000000000002",
-  },
-  {
-    id: "t0000000-0000-4000-8000-000000000003",
-    label: "Wrong size — order #3",
-    customerId: "c0000000-0000-4000-8000-000000000002",
-    orderId: "o0000000-0000-4000-8000-000000000003",
-  },
-];
+import { useSessionStore } from "@/lib/session-store";
+import type { Persona, Role, TicketSummary } from "@/lib/types";
 
 const ROLES: Role[] = ["customer", "seller", "support"];
 
 export function PersonaPicker() {
-  const { role, personaId, ticketId, setRole, setPersonaId, setTicketId } =
-    useSessionStore();
+  const {
+    role,
+    personaId,
+    ticketId,
+    supportPersonaId,
+    setRole,
+    setPersonaId,
+    setTicketId,
+  } = useSessionStore();
 
-  const personasForRole = MOCK_PERSONAS.filter((persona) => persona.role === role);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [tickets, setTickets] = useState<TicketSummary[]>([]);
+  const [loadingPersonas, setLoadingPersonas] = useState(false);
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!role) {
+      setPersonas([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPersonas() {
+      setLoadingPersonas(true);
+      setError(null);
+
+      try {
+        const response = await fetch(
+          `/api/personas?role=${encodeURIComponent(role!)}`,
+        );
+        const data = (await response.json()) as Persona[] | { error?: string };
+
+        if (!response.ok) {
+          throw new Error(
+            !Array.isArray(data) && data.error
+              ? data.error
+              : "Failed to load personas",
+          );
+        }
+
+        if (!cancelled) {
+          setPersonas(Array.isArray(data) ? data : []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setPersonas([]);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load personas",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPersonas(false);
+        }
+      }
+    }
+
+    void loadPersonas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  useEffect(() => {
+    if (role !== "support") {
+      setTickets([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadTickets() {
+      setLoadingTickets(true);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/tickets");
+        const data = (await response.json()) as
+          | TicketSummary[]
+          | { error?: string };
+
+        if (!response.ok) {
+          throw new Error(
+            !Array.isArray(data) && data.error
+              ? data.error
+              : "Failed to load tickets",
+          );
+        }
+
+        if (!cancelled) {
+          setTickets(Array.isArray(data) ? data : []);
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setTickets([]);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Failed to load tickets",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTickets(false);
+        }
+      }
+    }
+
+    void loadTickets();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
+
+  const supportPersona =
+    personas.find((persona) => persona.id === supportPersonaId) ?? personas[0];
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
@@ -87,27 +158,43 @@ export function PersonaPicker() {
 
       {role === "support" ? (
         <>
-          <Select value={SUPPORT_PERSONA_ID} disabled>
+          <Select
+            value={supportPersona?.id ?? supportPersonaId}
+            disabled
+          >
             <SelectTrigger
               size="sm"
               className="w-[180px]"
               aria-label="Support persona"
             >
-              <SelectValue />
+              <SelectValue
+                placeholder={loadingPersonas ? "Loading…" : "Support"}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={SUPPORT_PERSONA_ID}>Casey Support</SelectItem>
+              {supportPersona ? (
+                <SelectItem value={supportPersona.id}>
+                  {supportPersona.name}
+                </SelectItem>
+              ) : (
+                <SelectItem value={supportPersonaId}>Support</SelectItem>
+              )}
             </SelectContent>
           </Select>
           <Select
             value={ticketId ?? undefined}
             onValueChange={(value) => setTicketId(value)}
+            disabled={loadingTickets || tickets.length === 0}
           >
-            <SelectTrigger size="sm" className="w-[240px]" aria-label="Ticket">
-              <SelectValue placeholder="Select ticket" />
+            <SelectTrigger size="sm" className="w-[280px]" aria-label="Ticket">
+              <SelectValue
+                placeholder={
+                  loadingTickets ? "Loading tickets…" : "Select ticket"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
-              {MOCK_TICKETS.map((ticket) => (
+              {tickets.map((ticket) => (
                 <SelectItem key={ticket.id} value={ticket.id}>
                   {ticket.label}
                 </SelectItem>
@@ -119,18 +206,27 @@ export function PersonaPicker() {
         <Select
           value={personaId ?? undefined}
           onValueChange={(value) => setPersonaId(value)}
+          disabled={loadingPersonas || personas.length === 0}
         >
           <SelectTrigger size="sm" className="w-[180px]" aria-label="Persona">
-            <SelectValue placeholder="Select persona" />
+            <SelectValue
+              placeholder={
+                loadingPersonas ? "Loading personas…" : "Select persona"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
-            {personasForRole.map((persona) => (
+            {personas.map((persona) => (
               <SelectItem key={persona.id} value={persona.id}>
                 {persona.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+      ) : null}
+
+      {error ? (
+        <span className="text-destructive text-xs">{error}</span>
       ) : null}
     </div>
   );

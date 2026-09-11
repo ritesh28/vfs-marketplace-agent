@@ -7,9 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { SUPPORT_USER_ID } from "@/lib/seed/ids";
 import type { Role, SessionSelection } from "@/lib/types";
-
-const SUPPORT_PERSONA_ID = "a0000000-0000-4000-8000-000000000001";
 
 type SessionStoreValue = SessionSelection & {
   setRole: (role: Role | null) => void;
@@ -32,7 +31,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function setRole(role: Role | null) {
     setSelection({
       role,
-      personaId: role === "support" ? SUPPORT_PERSONA_ID : null,
+      personaId: role === "support" ? SUPPORT_USER_ID : null,
       ticketId: null,
     });
   }
@@ -71,7 +70,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setRole,
         setPersonaId,
         setTicketId,
-        supportPersonaId: SUPPORT_PERSONA_ID,
+        supportPersonaId: SUPPORT_USER_ID,
       }}
     >
       {children}
@@ -89,4 +88,4 @@ export function useSessionStore() {
   return context;
 }
 
-export { SUPPORT_PERSONA_ID };
+export { SUPPORT_USER_ID as SUPPORT_PERSONA_ID };
