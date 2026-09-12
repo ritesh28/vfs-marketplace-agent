@@ -27,7 +27,7 @@ export async function getTableRows(table: DbTableName) {
 }
 
 export async function listPersonasByRole(role: Role): Promise<Persona[]> {
-  if (role === "customer") {
+  if (role === "CUSTOMER") {
     const rows = await db
       .select({ id: customers.id, name: customers.name })
       .from(customers)
@@ -35,7 +35,7 @@ export async function listPersonasByRole(role: Role): Promise<Persona[]> {
     return rows;
   }
 
-  if (role === "seller") {
+  if (role === "SELLER") {
     const rows = await db
       .select({ id: sellers.id, name: sellers.name })
       .from(sellers)

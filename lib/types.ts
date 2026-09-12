@@ -1,6 +1,7 @@
-import type { Role, TicketStatus } from "@/lib/db/types";
+import { isRole, ROLES, type Role, type TicketStatus } from "@/lib/db/types";
 
 export type { Role, TicketStatus };
+export { isRole, ROLES };
 
 export type AiProvider = "openai" | "gemini" | "anthropic";
 

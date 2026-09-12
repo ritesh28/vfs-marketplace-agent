@@ -43,14 +43,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return {
         ...current,
         personaId,
-        ticketId: current.role === "support" ? current.ticketId : null,
+        ticketId: current.role === "SUPPORT" ? current.ticketId : null,
       };
     });
   }
 
   function setTicketId(ticketId: string | null) {
     setSelection((current) => {
-      if (current.role !== "support" || current.ticketId === ticketId) {
+      if (current.role !== "SUPPORT" || current.ticketId === ticketId) {
         return current;
       }
 

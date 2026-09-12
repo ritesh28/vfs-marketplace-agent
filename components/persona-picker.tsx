@@ -10,9 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSessionStore } from "@/lib/session-store";
-import type { Persona, Role, TicketSummary } from "@/lib/types";
-
-const ROLES: Role[] = ["customer", "seller", "support"];
+import { ROLES, type Persona, type Role, type TicketSummary } from "@/lib/types";
 
 export function PersonaPicker() {
   const {
@@ -61,7 +59,7 @@ export function PersonaPicker() {
           setPersonas(next);
 
           // Support has a single DB persona — auto-select from API, not seed IDs.
-          if (role === "support" && next[0]) {
+          if (role === "SUPPORT" && next[0]) {
             setPersonaId(next[0].id);
           }
         }
@@ -91,7 +89,7 @@ export function PersonaPicker() {
   }, [role]);
 
   useEffect(() => {
-    if (role !== "support") {
+    if (role !== "SUPPORT") {
       setTickets([]);
       return;
     }
@@ -156,13 +154,13 @@ export function PersonaPicker() {
         <SelectContent>
           {ROLES.map((id) => (
             <SelectItem key={id} value={id}>
-              {id.charAt(0).toUpperCase() + id.slice(1)}
+              {id.charAt(0) + id.slice(1).toLowerCase()}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
 
-      {role === "support" ? (
+      {role === "SUPPORT" ? (
         <>
           <Select value={personaId ?? supportPersona?.id} disabled>
             <SelectTrigger

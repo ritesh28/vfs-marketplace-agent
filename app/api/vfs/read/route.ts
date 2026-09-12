@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 
-import type { Role } from "@/lib/types";
+import { isRole } from "@/lib/types";
 import { VfsPath } from "@/lib/vfs/paths";
 import { VfsSessionScope } from "@/lib/vfs/session";
 import { VfsStore } from "@/lib/vfs/store";
 import type { VfsSession } from "@/lib/vfs/filesystem";
-
-const ROLES: Role[] = ["customer", "seller", "support"];
 
 class VfsReadRequest {
   static parse(url: URL): VfsSession | { error: string } {
@@ -14,20 +12,20 @@ class VfsReadRequest {
     const personaId = url.searchParams.get("personaId");
     const ticketId = url.searchParams.get("ticketId");
 
-    if (!role || !ROLES.includes(role as Role)) {
+    if (!role || !isRole(role)) {
       return { error: "Missing or invalid role" };
     }
     if (!personaId) {
       return { error: "Missing personaId" };
     }
-    if (role === "support" && !ticketId) {
+    if (role === "SUPPORT" && !ticketId) {
       return { error: "Missing ticketId for support session" };
     }
 
     const session = {
-      role: role as Role,
+      role,
       personaId,
-      ticketId: role === "support" ? ticketId : null,
+      ticketId: role === "SUPPORT" ? ticketId : null,
     };
 
     if (!VfsSessionScope.isReady(session)) {

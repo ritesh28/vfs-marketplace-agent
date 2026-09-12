@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { listPersonasByRole } from "@/lib/db/queries";
-import type { Role } from "@/lib/types";
-
-const ROLES: Role[] = ["customer", "seller", "support"];
-
-function isRole(value: string): value is Role {
-  return ROLES.includes(value as Role);
-}
+import { isRole, ROLES } from "@/lib/types";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -22,7 +16,9 @@ export async function GET(request: Request) {
 
   if (!isRole(role)) {
     return NextResponse.json(
-      { error: `Invalid role: ${role}. Expected customer, seller, or support.` },
+      {
+        error: `Invalid role: ${role}. Expected ${ROLES.join(", ")}.`,
+      },
       { status: 400 },
     );
   }

@@ -1,6 +1,13 @@
 /** Session / event actor role — shared by UI session and `events.actor`. */
 export type Role = "CUSTOMER" | "SELLER" | "SUPPORT";
 
+/** Runtime list of all Role values — import instead of redefining. */
+export const ROLES: readonly Role[] = ["CUSTOMER", "SELLER", "SUPPORT"];
+
+export function isRole(value: string): value is Role {
+  return (ROLES as readonly string[]).includes(value);
+}
+
 /** Order fulfillment status — TypeScript only; stored as text in Postgres. */
 export type OrderStatus = "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED";
 
