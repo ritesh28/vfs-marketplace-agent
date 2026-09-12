@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import {
   Tree,
   TreeItem,
@@ -14,11 +16,13 @@ import {
   FolderOpenIcon,
 } from "lucide-react";
 
+import { useSessionStore } from "@/lib/session-store";
+import type { VfsListEntry } from "@/lib/vfs/types";
+
 interface FileItem {
   name: string;
   children?: string[];
-  type?: "folder" | "json";
-  content?: string;
+  type?: "directory" | "file" | "json" | "md";
   path?: string;
 }
 
@@ -27,196 +31,253 @@ export type VfsFilePreview = {
   content: string;
 };
 
-// Phase 1: static mock. Phase 4+: feed from lazy VFS list API / store.
-const items: Record<string, FileItem> = {
-  root: {
-    name: "marketplace",
-    children: ["sellers", "customers"],
-    type: "folder",
-  },
-  sellers: {
-    name: "sellers",
-    children: ["seller-1"],
-    type: "folder",
-  },
-  "seller-1": {
-    name: "s0000000-0000-4000-8000-000000000001",
-    children: ["seller-1-profile", "seller-1-products"],
-    type: "folder",
-  },
-  "seller-1-profile": {
-    name: "profile.json",
-    type: "json",
-    path: "marketplace/sellers/s0000000-0000-4000-8000-000000000001/profile.json",
-    content: JSON.stringify(
-      { name: "Sam Seller", emailId: "sam@sellers.example" },
-      null,
-      2,
-    ),
-  },
-  "seller-1-products": {
-    name: "products",
-    children: ["product-1"],
-    type: "folder",
-  },
-  "product-1": {
-    name: "p0000000-0000-4000-8000-000000000001.json",
-    type: "json",
-    path: "marketplace/sellers/s0000000-0000-4000-8000-000000000001/products/p0000000-0000-4000-8000-000000000001.json",
-    content: JSON.stringify(
-      {
-        name: "Canvas Tote",
-        category: "bags",
-        quantity: 24,
-        metadata: { color: "olive" },
-      },
-      null,
-      2,
-    ),
-  },
-  customers: {
-    name: "customers",
-    children: ["customer-1"],
-    type: "folder",
-  },
-  "customer-1": {
-    name: "c0000000-0000-4000-8000-000000000001",
-    children: ["customer-1-profile", "customer-1-orders", "customer-1-support"],
-    type: "folder",
-  },
-  "customer-1-profile": {
-    name: "profile.json",
-    type: "json",
-    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/profile.json",
-    content: JSON.stringify(
-      { name: "Ava Customer", emailId: "ava@customers.example" },
-      null,
-      2,
-    ),
-  },
-  "customer-1-orders": {
-    name: "orders",
-    children: ["order-1"],
-    type: "folder",
-  },
-  "order-1": {
-    name: "o0000000-0000-4000-8000-000000000001.json",
-    type: "json",
-    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/orders/o0000000-0000-4000-8000-000000000001.json",
-    content: JSON.stringify(
-      {
-        date: "2026-09-01",
-        items: [
-          {
-            "item-id": "p0000000-0000-4000-8000-000000000001",
-            price: 42,
-            quantity: 1,
-          },
-        ],
-        totalCost: 42,
-        status: "shipped",
-      },
-      null,
-      2,
-    ),
-  },
-  "customer-1-support": {
-    name: "support",
-    children: ["ticket-1"],
-    type: "folder",
-  },
-  "ticket-1": {
-    name: "t0000000-0000-4000-8000-000000000001.json",
-    type: "json",
-    path: "marketplace/customers/c0000000-0000-4000-8000-000000000001/support/t0000000-0000-4000-8000-000000000001.json",
-    content: JSON.stringify(
-      {
-        "customer-id": "c0000000-0000-4000-8000-000000000001",
-        "order-id": "o0000000-0000-4000-8000-000000000001",
-        "list-of-messages": [
-          { from: "customer", body: "My tote never arrived." },
-          { from: "support", body: "Looking into the shipment now." },
-        ],
-        status: "in-progress",
-      },
-      null,
-      2,
-    ),
-  },
-};
-
+const ROOT_ID = "marketplace";
 const indent = 20;
+
+function sessionQuery(role: string, personaId: string, ticketId: string | null) {
+  const params = new URLSearchParams({
+    role,
+    personaId,
+  });
+  if (ticketId) {
+    params.set("ticketId", ticketId);
+  }
+  return params;
+}
 
 export function VfsTree({
   onFileOpen,
 }: {
   onFileOpen?: (preview: VfsFilePreview) => void;
 }) {
+  const { role, personaId, ticketId } = useSessionStore();
+  const [items, setItems] = useState<Record<string, FileItem>>({
+    [ROOT_ID]: { name: "marketplace", children: [], type: "directory", path: ROOT_ID },
+  });
+  const [treeKey, setTreeKey] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const ready = Boolean(role && personaId && (role !== "SUPPORT" || ticketId));
+
+  useEffect(() => {
+    if (!ready || !role || !personaId) {
+      setItems({
+        [ROOT_ID]: {
+          name: "marketplace",
+          children: [],
+          type: "directory",
+          path: ROOT_ID,
+        },
+      });
+      setTreeKey((k) => k + 1);
+      return;
+    }
+
+    let cancelled = false;
+    const params = sessionQuery(role, personaId, ticketId);
+    params.set("path", ROOT_ID);
+    params.set("reset", "1");
+
+    async function loadRoot() {
+      setError(null);
+      try {
+        const res = await fetch(`/api/vfs/list?${params.toString()}`);
+        const data = (await res.json()) as {
+          entries?: VfsListEntry[];
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(data.error ?? "Failed to list VFS");
+        }
+        if (cancelled) return;
+
+        const next: Record<string, FileItem> = {
+          [ROOT_ID]: {
+            name: "marketplace",
+            children: [],
+            type: "directory",
+            path: ROOT_ID,
+          },
+        };
+        mergeEntries(next, ROOT_ID, data.entries ?? []);
+        setItems(next);
+        setTreeKey((k) => k + 1);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "VFS load failed");
+        }
+      }
+    }
+
+    void loadRoot();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, role, personaId, ticketId]);
+
   const tree = useTree<FileItem>({
     initialState: {
-      expandedItems: ["root", "sellers", "customers"],
+      expandedItems: [ROOT_ID],
     },
     indent,
-    rootItemId: "root",
+    rootItemId: ROOT_ID,
     getItemName: (item) => item.getItemData().name,
-    isItemFolder: (item) => (item.getItemData()?.children?.length ?? 0) > 0,
+    isItemFolder: (item) => item.getItemData()?.type === "directory",
     dataLoader: {
-      getItem: (itemId) => items[itemId],
-      getChildren: (itemId) => items[itemId]?.children ?? [],
+      getItem: (itemId) => itemsRef.current[itemId] ?? { name: itemId },
+      getChildren: (itemId) => itemsRef.current[itemId]?.children ?? [],
     },
     features: [syncDataLoaderFeature, hotkeysCoreFeature],
   });
 
+  async function expandFolder(path: string, itemId: string) {
+    if (!role || !personaId) return;
+    const params = sessionQuery(role, personaId, ticketId);
+    params.set("path", path);
+    const res = await fetch(`/api/vfs/list?${params.toString()}`);
+    const data = (await res.json()) as {
+      entries?: VfsListEntry[];
+      error?: string;
+    };
+    if (!res.ok) {
+      setError(data.error ?? "Failed to list directory");
+      return;
+    }
+    setItems((prev) => {
+      const next = { ...prev };
+      mergeEntries(next, itemId, data.entries ?? []);
+      return next;
+    });
+  }
+
+  async function openFile(path: string) {
+    if (!role || !personaId) return;
+    const params = sessionQuery(role, personaId, ticketId);
+    params.set("path", path);
+    const res = await fetch(`/api/vfs/read?${params.toString()}`);
+    const data = (await res.json()) as {
+      content?: string;
+      error?: string;
+      path?: string;
+    };
+    if (!res.ok) {
+      setError(data.error ?? "Failed to read file");
+      return;
+    }
+    onFileOpen?.({
+      path: data.path ?? path,
+      content: data.content ?? "",
+    });
+  }
+
+  if (!ready) {
+    return (
+      <p className="text-muted-foreground p-4 text-sm">
+        Select a role and persona to load the VFS.
+      </p>
+    );
+  }
+
   return (
-    <Tree indent={indent} tree={tree} className="p-2">
-      {tree.getItems().map((item) => {
-        const data = item.getItemData();
-        const isFolder = item.isFolder();
-        const isExpanded = item.isExpanded();
-        const isJson = data.type === "json" || data.name.endsWith(".json");
+    <div className="flex flex-col gap-2 p-2">
+      {error ? (
+        <p className="text-destructive px-2 text-xs">{error}</p>
+      ) : null}
+      <Tree key={treeKey} indent={indent} tree={tree} className="p-0">
+        {tree.getItems().map((item) => {
+          const data = item.getItemData();
+          const isFolder = item.isFolder();
+          const isExpanded = item.isExpanded();
+          const isJson = data.type === "json" || data.name.endsWith(".json");
+          const isMd = data.type === "md" || data.name.endsWith(".md");
 
-        return (
-          <TreeItem
-            key={item.getId()}
-            item={item}
-            onClick={(event) => {
-              if (isFolder || !data.content) {
-                return;
-              }
-
-              // Keep the open handler from being cleared by the panel dismiss listener.
-              event.stopPropagation();
-              onFileOpen?.({
-                path: data.path ?? data.name,
-                content: data.content,
-              });
-            }}
-            onMouseDown={(event) => {
-              if (isFolder || !data.content) {
-                return;
-              }
-              event.stopPropagation();
-            }}
-          >
-            <TreeItemLabel>
-              <span className="flex items-center gap-2">
-                {isFolder ? (
-                  isExpanded ? (
-                    <FolderOpenIcon className="text-muted-foreground size-4" />
+          return (
+            <TreeItem
+              key={item.getId()}
+              item={item}
+              onClick={(event) => {
+                if (isFolder) {
+                  event.stopPropagation();
+                  if (!isExpanded && data.path) {
+                    void expandFolder(data.path, item.getId());
+                  }
+                  return;
+                }
+                if (!data.path) return;
+                event.stopPropagation();
+                void openFile(data.path);
+              }}
+              onMouseDown={(event) => {
+                if (isFolder || !data.path) return;
+                event.stopPropagation();
+              }}
+            >
+              <TreeItemLabel>
+                <span className="flex items-center gap-2">
+                  {isFolder ? (
+                    isExpanded ? (
+                      <FolderOpenIcon className="text-muted-foreground size-4" />
+                    ) : (
+                      <FolderIcon className="text-muted-foreground size-4" />
+                    )
+                  ) : isJson ? (
+                    <BracesIcon className="text-muted-foreground size-4" />
+                  ) : isMd ? (
+                    <FileIcon className="text-muted-foreground size-4" />
                   ) : (
-                    <FolderIcon className="text-muted-foreground size-4" />
-                  )
-                ) : isJson ? (
-                  <BracesIcon className="text-muted-foreground size-4" />
-                ) : (
-                  <FileIcon className="text-muted-foreground size-4" />
-                )}
-                <span className="truncate">{item.getItemName()}</span>
-              </span>
-            </TreeItemLabel>
-          </TreeItem>
-        );
-      })}
-    </Tree>
+                    <FileIcon className="text-muted-foreground size-4" />
+                  )}
+                  <span className="truncate">{item.getItemName()}</span>
+                </span>
+              </TreeItemLabel>
+            </TreeItem>
+          );
+        })}
+      </Tree>
+    </div>
   );
+}
+
+function mergeEntries(
+  items: Record<string, FileItem>,
+  parentId: string,
+  entries: VfsListEntry[],
+) {
+  const parent = items[parentId] ?? {
+    name: parentId,
+    children: [],
+    type: "directory" as const,
+    path: parentId,
+  };
+  const childIds: string[] = [];
+  for (const entry of entries) {
+    const id = entry.path;
+    childIds.push(id);
+    if (entry.kind === "directory") {
+      items[id] = {
+        name: entry.name,
+        children: items[id]?.children ?? [],
+        type: "directory",
+        path: entry.path,
+      };
+    } else {
+      const type = entry.name.endsWith(".json")
+        ? "json"
+        : entry.name.endsWith(".md")
+          ? "md"
+          : "file";
+      items[id] = {
+        name: entry.name,
+        type,
+        path: entry.path,
+      };
+    }
+  }
+  items[parentId] = {
+    ...parent,
+    type: "directory",
+    children: childIds,
+  };
 }

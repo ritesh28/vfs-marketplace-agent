@@ -14,6 +14,40 @@ export type OrderStatus = "CONFIRMED" | "PROCESSING" | "SHIPPED" | "DELIVERED";
 /** Support ticket status — TypeScript only; stored as text in Postgres. */
 export type TicketStatus = "OPEN" | "IN-PROGRESS" | "RESOLVED";
 
+/** Static copy for VFS markdown `## status definition` blocks. */
+export const STATUS_DEFINITIONS = {
+  order: {
+    CONFIRMED:
+      "Order placed and accepted; payment recorded; awaiting fulfillment.",
+    PROCESSING:
+      "Warehouse or seller is preparing the items for shipment.",
+    SHIPPED: "Package has left the seller; in transit to the customer.",
+    DELIVERED: "Package marked as delivered to the customer.",
+  },
+  ticket: {
+    OPEN: "Ticket filed; waiting for support to pick it up.",
+    "IN-PROGRESS":
+      "Support is actively investigating or working on the issue.",
+    RESOLVED:
+      "Issue addressed; no further action expected unless reopened.",
+  },
+} as const satisfies {
+  order: Record<OrderStatus, string>;
+  ticket: Record<TicketStatus, string>;
+};
+
+export function orderStatusDefinitionLines(): string[] {
+  return (Object.keys(STATUS_DEFINITIONS.order) as OrderStatus[]).map(
+    (status) => `- ${status}: ${STATUS_DEFINITIONS.order[status]}`,
+  );
+}
+
+export function ticketStatusDefinitionLines(): string[] {
+  return (Object.keys(STATUS_DEFINITIONS.ticket) as TicketStatus[]).map(
+    (status) => `- ${status}: ${STATUS_DEFINITIONS.ticket[status]}`,
+  );
+}
+
 /** Ticket message author — subset of Role (sellers do not send ticket messages). */
 export type TicketMessageFrom = Extract<Role, "CUSTOMER" | "SUPPORT">;
 

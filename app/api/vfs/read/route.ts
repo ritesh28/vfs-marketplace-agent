@@ -4,7 +4,7 @@ import { isRole } from "@/lib/types";
 import { VfsPath } from "@/lib/vfs/paths";
 import { VfsSessionScope } from "@/lib/vfs/session";
 import { VfsStore } from "@/lib/vfs/store";
-import type { VfsSession } from "@/lib/vfs/filesystem";
+import type { VfsSession } from "@/lib/vfs/types";
 
 class VfsReadRequest {
   static parse(url: URL): VfsSession | { error: string } {

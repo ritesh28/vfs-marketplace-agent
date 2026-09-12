@@ -1,188 +1,189 @@
 # Agent instructions
 
-Single agent for the VFS Marketplace. Use the in-memory VFS as context via tools. **DB is the source of truth**; the VFS is a working projection.
+Single agent for the VFS Marketplace. Use the in-memory VFS as context via tools. **DB is the source of truth**; the VFS is a transient working projection.
 
 There is **one agent only** — no subagents.
 
-The VFS uses **lazy loading**: load nodes on demand according to the **chosen actor** (and for support: the chosen ticket context), not the entire tree up front.
+The VFS uses **lazy loading**: load nodes on demand for the **active role** (`CUSTOMER` | `SELLER` | `SUPPORT`) and persona (and for support: the selected ticket). Use `list_directory` to reveal folder contents — do not assume a folder is empty until you have listed it.
 
 ---
 
 ## Tools
 
-### `list` (directories / files)
+### `list_directory`
 
-- Pass the **current directory absolute path**.
-- Returns the listing for that path in the VFS.
+- Pass a **directory** path from the allowed directory set (no leading `/`).
+- Returns a **flat list** of immediate **files and directories**.
+- Listing triggers JIT DB hydration for that folder when needed.
 
 ### `read`
 
-- Read file contents from the VFS by path.
+- Read file contents by path.
+- Domain records are **markdown (`.md`)** with YAML frontmatter.
+- Files under `marketplace/agent-output/` are **JSON**, create-only, then **read-only**. All session roles may read them.
 
-### `write` (create new file)
+### `write` (create new file only)
 
-1. Write the **new file** into the in-memory VFS.
-2. Write the corresponding data to the **DB** (domain tables).
-3. Record an **event** in `events` alongside that update.
+- Provide **both** `path` and **JSON content**.
+- **No overwrite**, **no append**, **no rename**.
+- Path must match `marketplace/agent-output/output-{n}.json` (`n` = 1, 2, 3, …).
 
-### `modify` (change existing file)
+1. Create the JSON file in the VFS.
+2. Heuristic code Zod-validates, mutates the **DB**, appends an **`events`** row (`created_at` only).
+3. On DB insert → create matching domain `.md`. On DB update → refresh existing `.md`.
+4. The `output-N.json` file stays read-only.
 
-1. Supply the change in **git-style format**: what is **removed** and what is **added**.
-2. Apply that change to the in-memory VFS file.
-3. Update the **DB** (domain tables) to match.
-4. Record an **event** in `events` alongside that update.
+There is **no** `modify` tool and **no** rename tool.
 
-Every `write` / `modify` emits an event. Events are an append-only log alongside direct DB updates (not event-sourced).
+### `search`
+
+- Signature: `search(query, directory-path)` — **both required**.
+- `query` — case-insensitive **substring / contains** over file contents under the directory.
+- `directory-path` — any **allowed directory**. If not loaded, the system loads it first, then searches.
+- Returns matching file paths and snippets. Does not write or rename.
+
+Every successful heuristic DB change emits an `events` row (append-only alongside direct DB updates; not event-sourced).
 
 ---
 
 ## Guardrails
 
-Apply before any create or change:
+Before any create or change:
 
-- Reject invalid or disallowed values (e.g. invalid email).
-- If the request contains **sexual, derogatory, offensive, or otherwise non-decent** content, **do not allow** it.
-- Always respect the **active persona** write permissions below. If a request is outside the allow list, refuse and explain.
+- Reject invalid values (e.g. invalid email).
+- Reject sexual, derogatory, offensive, or non-decent content.
+- Respect the active persona allow list; refuse and explain if outside it.
 
 ---
 
 ## Active persona
 
-The UI selects a role (and persona / ticket). Load and operate only within that session’s VFS.
-
 | Role | Selection |
 | --- | --- |
-| Customer / Seller | User picks role, then a specific seeded persona (UUID). |
-| Support | Single support persona is auto-selected; user picks a **ticket**. VFS includes that ticket plus related customer, seller, and order under normal `/marketplace/...` paths. |
+| `CUSTOMER` / `SELLER` | User picks role, then a seeded persona UUID. |
+| `SUPPORT` | Support persona auto-selected; user picks a **ticket**. VFS mounts related customer, order, ticket, and matching seller/product paths under normal ownership paths. |
 
 ---
 
-## VFS paths
+## Path rules
 
-IDs in paths are **UUIDs**. Do **not** duplicate the same logical record at more than one path.
+- **No leading slash**: `marketplace/...`, not `/marketplace/...`.
+- Entity ids are **digits-only** UUIDs: `^[0-9]{8}-[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{12}$`.
+- One logical record → one path. Do not invent paths or ids.
 
-**Sellers**
-
-```txt
-marketplace/sellers/[seller-id]/profile.json
-marketplace/sellers/[seller-id]/products/[product-id].json
-```
-
-**Customers**
+### Domain files (DB → `.md`)
 
 ```txt
-marketplace/customers/[customer-id]/profile.json
-marketplace/customers/[customer-id]/orders/[order-id].json
-marketplace/customers/[customer-id]/support/[ticket-id].json
+marketplace/sellers/{id}/profile.md
+marketplace/sellers/{id}/products/{id}.md
+marketplace/customers/{id}/profile.md
+marketplace/customers/{id}/orders/{id}.md
+marketplace/customers/{id}/support/{id}.md
 ```
 
-Orders are **customer-owned only** (no seller-side order path).
+### Agent output (JSON writes)
+
+```txt
+marketplace/agent-output/output-1.json
+marketplace/agent-output/output-2.json
+…
+```
 
 ### Tree
 
 ```txt
-/marketplace
-│
-├── /sellers
-│   └── /[seller-id]
-│       ├── profile.json
-│       └── /products
-│           ├── [product-id].json
-│           └── …
-│
-└── /customers
-    └── /[customer-id]
-        ├── profile.json
-        ├── /orders
-        │   ├── [order-id].json
-        │   └── …
-        └── /support
-            ├── [ticket-id].json
-            └── …
+marketplace
+├── agent-output/
+│   └── output-N.json
+├── sellers/{seller-id}/
+│   ├── profile.md
+│   └── products/{product-id}.md
+└── customers/{customer-id}/
+    ├── profile.md
+    ├── orders/{order-id}.md
+    └── support/{ticket-id}.md
 ```
 
-### JSON shapes
+Orders are **customer-owned only**.
 
-**`profile.json`** — `name`, `emailId`
+### Allowed directories (`list_directory` / `search`)
 
-**`product.json`** — `name`, `category`, `quantity`, `metadata`
+`marketplace` · `marketplace/sellers` · `marketplace/sellers/{id}` · `marketplace/sellers/{id}/products` · `marketplace/customers` · `marketplace/customers/{id}` · `marketplace/customers/{id}/orders` · `marketplace/customers/{id}/support` · `marketplace/agent-output`
 
-**`order.json`** — `date`, `items` (`{ item-id, price, quantity }`), `totalCost`, `status` (`confirmed` | `processing` | `shipped` | `delivered`)
+### FileKind (`resource-type` in frontmatter)
 
-**`ticket.json`** — `customer-id`, `order-id`, `list-of-messages` (`{ from, body }`), `status` (`open` | `in-progress` | `resolved`)
+`seller-profile` · `seller-product` · `customer-profile` · `customer-order` · `customer-ticket` · `agent-output`
 
-Message `from`: `customer` | `support`
+### Markdown frontmatter (domain `.md` only)
+
+`path`, `resource-type`, `created_at`, `permissions` (`read`, `write`).
+
+**For now:** all domain files are read-only (`read: true`, `write: false`). TODO: richer matrix later.
+
+### Status enums (DB / markdown)
+
+- Orders: `CONFIRMED` | `PROCESSING` | `SHIPPED` | `DELIVERED`
+- Tickets: `OPEN` | `IN-PROGRESS` | `RESOLVED`
+- Ticket message `from`: `CUSTOMER` | `SUPPORT`
+
+`## status definition` blocks are filled from static `STATUS_DEFINITIONS` in `lib/db/types.ts` at hydrate time.
+
+### Timezones
+
+| Layer | Zone |
+| --- | --- |
+| Processing / VFS markdown / agent | **Australia/Sydney** (`dd-mm-yyyy hh:mm` in ticket messages) |
+| User-facing UI display | **Browser local** |
+
+### Agent JSON — customer profile edit (implemented)
+
+```json
+{
+  "customer-id": "<digits-uuid>",
+  "column-name": "name",
+  "updated-value": "Ava"
+}
+```
+
+`column-name`: `name` | `email_id` only (values match DB columns; agent JSON keys use `-`). Only the **active CUSTOMER** may edit **their own** profile.
+
+### Other write operations
+
+Placeholders only — create order / ticket / product, edit seller profile / product, add ticket message. Do not invent payloads.
+
+Body layouts: see [lib/agent/system-instructions.md](./lib/agent/system-instructions.md).
 
 ---
 
 ## Persona write permissions
 
-### Summary
+Writes = create a new `output-N.json` under `marketplace/agent-output/`.
 
-| Persona  | Create (`write`)      | Modify (`modify`)                    |
-| -------- | --------------------- | ------------------------------------ |
-| Customer | new order, new ticket | profile; add message to a ticket     |
-| Seller   | new product           | profile; existing product            |
-| Support  | —                     | add message to a ticket              |
+| Persona | Allowed intents |
+| --- | --- |
+| `CUSTOMER` | Edit own profile (schema above); create order / ticket / add ticket message (**placeholders**) |
+| `SELLER` | Create product; edit own profile; edit product (**placeholders**) |
+| `SUPPORT` | Add message to selected ticket (**placeholder**) |
 
-### Customer
-
-**May create (`write`)**
-
-- New order — `marketplace/customers/[customer-id]/orders/[order-id].json`
-- New ticket — `marketplace/customers/[customer-id]/support/[ticket-id].json`
-
-**May modify (`modify`)**
-
-- Own profile — `…/profile.json`
-- Add message to a ticket — append to `list-of-messages` on an existing ticket
-
-**Must not** — anything else (seller data, other customers’ data, creating products, etc.)
-
-### Seller
-
-**May create (`write`)**
-
-- New product — `marketplace/sellers/[seller-id]/products/[product-id].json`
-
-**May modify (`modify`)**
-
-- Own profile — `…/profile.json`
-- Existing product — an already present `…/products/[product-id].json`
-
-**Must not** — anything else (customer profiles, orders, tickets, etc.)
-
-### Support
-
-Works in the context of a **selected ticket**. Related customer, seller, order, and ticket are mounted under normal `/marketplace/...` paths.
-
-**May modify (`modify`)**
-
-- Add message to a ticket — append to `list-of-messages` on the selected ticket
-
-**Must not**
-
-- Create an order for a customer
-- Edit a customer profile
-- Create products or orders
-- Modify seller/customer profiles, products, or orders
-- Any other mutation outside adding a message to the ticket
+**Must not** — anything outside the allow list; write outside `marketplace/agent-output/`; rename/overwrite.
 
 ---
 
-## Domain roles (context)
+## Domain roles
 
-| Actor    | Purpose                                         |
-| -------- | ----------------------------------------------- |
-| Seller   | Sell products                                   |
-| Customer | Buy products                                    |
-| Support  | Help resolve problems for sellers and customers |
+| Actor | Purpose |
+| --- | --- |
+| Seller | Sell products |
+| Customer | Buy products |
+| Support | Help resolve problems for sellers and customers |
 
 - Only **customers** can open tickets.
-- User may ask anything in chat; use the VFS tools as context, constrained by permissions and guardrails.
+- User may ask anything in chat; use VFS tools within permissions and guardrails.
 
 ---
 
 ## Related
 
-- [ideasV2.md](./scratch/ideasV2.md) — product/tech idea doc (schema, UI, stack, VFS layout)
+- [scratch/vfs-implementation.md](./scratch/vfs-implementation.md) — VFS technical plan / implementation notes
+- [lib/vfs/](./lib/vfs/) — VFS runtime (`controller`, `adapter`, `store`, path gate)
+- [scratch/ideasV2.md](./scratch/ideasV2.md) — product/tech idea doc
