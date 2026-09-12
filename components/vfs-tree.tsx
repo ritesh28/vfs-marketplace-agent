@@ -39,37 +39,32 @@ function sessionQuery(
 	return params;
 }
 
-export function VfsTree({
-	onFileOpen,
-}: {
-	onFileOpen?: (preview: VfsFilePreview) => void;
-}) {
-	const { role, personaId, ticketId } = useSessionStore();
-	const [items, setItems] = useState<Record<string, FileItem>>({
+function emptyRoot(): Record<string, FileItem> {
+	return {
 		[ROOT_ID]: {
 			name: "marketplace",
 			children: [],
 			type: "directory",
 			path: ROOT_ID,
 		},
-	});
+	};
+}
+
+export function VfsTree({
+	onFileOpen,
+}: {
+	onFileOpen?: (preview: VfsFilePreview) => void;
+}) {
+	const { role, personaId, ticketId } = useSessionStore();
+	const [items, setItems] = useState<Record<string, FileItem>>(emptyRoot);
 	const [treeKey, setTreeKey] = useState(0);
 	const [error, setError] = useState<string | null>(null);
-	const itemsRef = useRef(items);
-	itemsRef.current = items;
 
 	const ready = Boolean(role && personaId && (role !== "SUPPORT" || ticketId));
 
 	useEffect(() => {
 		if (!ready || !role || !personaId) {
-			setItems({
-				[ROOT_ID]: {
-					name: "marketplace",
-					children: [],
-					type: "directory",
-					path: ROOT_ID,
-				},
-			});
+			setItems(emptyRoot());
 			setTreeKey((k) => k + 1);
 			return;
 		}
@@ -92,14 +87,7 @@ export function VfsTree({
 				}
 				if (cancelled) return;
 
-				const next: Record<string, FileItem> = {
-					[ROOT_ID]: {
-						name: "marketplace",
-						children: [],
-						type: "directory",
-						path: ROOT_ID,
-					},
-				};
+				const next = emptyRoot();
 				mergeEntries(next, ROOT_ID, data.entries ?? []);
 				setItems(next);
 				setTreeKey((k) => k + 1);
@@ -115,21 +103,6 @@ export function VfsTree({
 			cancelled = true;
 		};
 	}, [ready, role, personaId, ticketId]);
-
-	const tree = useTree<FileItem>({
-		initialState: {
-			expandedItems: [ROOT_ID],
-		},
-		indent,
-		rootItemId: ROOT_ID,
-		getItemName: (item) => item.getItemData().name,
-		isItemFolder: (item) => item.getItemData()?.type === "directory",
-		dataLoader: {
-			getItem: (itemId) => itemsRef.current[itemId] ?? { name: itemId },
-			getChildren: (itemId) => itemsRef.current[itemId]?.children ?? [],
-		},
-		features: [syncDataLoaderFeature, hotkeysCoreFeature],
-	});
 
 	async function expandFolder(path: string, itemId: string) {
 		if (!role || !personaId) return;
@@ -182,58 +155,100 @@ export function VfsTree({
 	return (
 		<div className="flex flex-col gap-2 p-2">
 			{error ? <p className="px-2 text-destructive text-xs">{error}</p> : null}
-			<Tree className="p-0" indent={indent} key={treeKey} tree={tree}>
-				{tree.getItems().map((item) => {
-					const data = item.getItemData();
-					const isFolder = item.isFolder();
-					const isExpanded = item.isExpanded();
-					const isJson = data.type === "json" || data.name.endsWith(".json");
-					const isMd = data.type === "md" || data.name.endsWith(".md");
-
-					return (
-						<TreeItem
-							item={item}
-							key={item.getId()}
-							onClick={(event) => {
-								if (isFolder) {
-									event.stopPropagation();
-									if (!isExpanded && data.path) {
-										void expandFolder(data.path, item.getId());
-									}
-									return;
-								}
-								if (!data.path) return;
-								event.stopPropagation();
-								void openFile(data.path);
-							}}
-							onMouseDown={(event) => {
-								if (isFolder || !data.path) return;
-								event.stopPropagation();
-							}}
-						>
-							<TreeItemLabel>
-								<span className="flex items-center gap-2">
-									{isFolder ? (
-										isExpanded ? (
-											<FolderOpenIcon className="size-4 text-muted-foreground" />
-										) : (
-											<FolderIcon className="size-4 text-muted-foreground" />
-										)
-									) : isJson ? (
-										<BracesIcon className="size-4 text-muted-foreground" />
-									) : isMd ? (
-										<FileIcon className="size-4 text-muted-foreground" />
-									) : (
-										<FileIcon className="size-4 text-muted-foreground" />
-									)}
-									<span className="truncate">{item.getItemName()}</span>
-								</span>
-							</TreeItemLabel>
-						</TreeItem>
-					);
-				})}
-			</Tree>
+			<VfsTreeView
+				key={treeKey}
+				items={items}
+				onExpandFolder={expandFolder}
+				onOpenFile={openFile}
+			/>
 		</div>
+	);
+}
+
+function VfsTreeView({
+	items,
+	onExpandFolder,
+	onOpenFile,
+}: {
+	items: Record<string, FileItem>;
+	onExpandFolder: (path: string, itemId: string) => void;
+	onOpenFile: (path: string) => void;
+}) {
+	const itemsRef = useRef(items);
+	itemsRef.current = items;
+
+	const tree = useTree<FileItem>({
+		initialState: {
+			expandedItems: [ROOT_ID],
+		},
+		indent,
+		rootItemId: ROOT_ID,
+		getItemName: (item) => item.getItemData().name,
+		isItemFolder: (item) => item.getItemData()?.type === "directory",
+		dataLoader: {
+			getItem: (itemId) => itemsRef.current[itemId] ?? { name: itemId },
+			getChildren: (itemId) => itemsRef.current[itemId]?.children ?? [],
+		},
+		features: [syncDataLoaderFeature, hotkeysCoreFeature],
+	});
+
+	// Expand/list updates mutate `items` without remounting — refresh tree cache.
+	useEffect(() => {
+		tree.rebuildTree();
+	}, [items, tree]);
+
+	return (
+		<Tree className="p-0" indent={indent} tree={tree}>
+			{tree.getItems().map((item) => {
+				const data = item.getItemData();
+				const isFolder = item.isFolder();
+				const isExpanded = item.isExpanded();
+				const isJson = data.type === "json" || data.name.endsWith(".json");
+				const isMd = data.type === "md" || data.name.endsWith(".md");
+
+				return (
+					<TreeItem
+						item={item}
+						key={item.getId()}
+						onClick={(event) => {
+							if (isFolder) {
+								event.stopPropagation();
+								if (!isExpanded && data.path) {
+									void onExpandFolder(data.path, item.getId());
+								}
+								return;
+							}
+							if (!data.path) return;
+							event.stopPropagation();
+							void onOpenFile(data.path);
+						}}
+						onMouseDown={(event) => {
+							if (isFolder || !data.path) return;
+							event.stopPropagation();
+						}}
+					>
+						<TreeItemLabel>
+							<span className="flex items-center gap-2">
+								{isFolder ? (
+									isExpanded ? (
+										<FolderOpenIcon className="size-4 text-muted-foreground" />
+									) : (
+										<FolderIcon className="size-4 text-muted-foreground" />
+									)
+								) : isJson ? (
+									<BracesIcon className="size-4 text-muted-foreground" />
+								) : isMd ? (
+									<FileIcon className="size-4 text-muted-foreground" />
+								) : (
+									<FileIcon className="size-4 text-muted-foreground" />
+								)}
+								<span className="truncate">{item.getItemName()}</span>
+							</span>
+						</TreeItemLabel>
+					</TreeItem>
+				);
+			})}
+		</Tree>
 	);
 }
 
