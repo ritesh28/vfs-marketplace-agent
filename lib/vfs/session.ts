@@ -3,6 +3,7 @@ import { eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { orderItems, orders, products, tickets } from "@/lib/db/schema";
 import { VfsPath } from "@/lib/vfs/paths";
+import { isSessionReady, vfsSessionKey } from "@/lib/vfs/session-gate";
 import type { VfsSession } from "@/lib/vfs/types";
 
 export type VfsPersonaScope = {
@@ -11,19 +12,9 @@ export type VfsPersonaScope = {
 };
 
 export const VfsSessionScope = {
-	isReady(session: VfsSession): boolean {
-		if (!session.role || !session.personaId) {
-			return false;
-		}
-		if (session.role === "SUPPORT" && !session.ticketId) {
-			return false;
-		}
-		return true;
-	},
+	isReady: isSessionReady,
 
-	sessionKey(session: VfsSession): string {
-		return `${session.role}:${session.personaId}:${session.ticketId ?? ""}`;
-	},
+	sessionKey: vfsSessionKey,
 
 	/** Resolve which seller/customer subtrees are visible for this session. */
 	async resolvePersonaScope(session: VfsSession): Promise<VfsPersonaScope> {
