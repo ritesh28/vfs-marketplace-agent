@@ -50,8 +50,8 @@ export class VfsStore {
 		}
 	}
 
-	/** UI: snapshot of agent-loaded VFS only (no DB hydrate). */
-	peekMirror(): VfsMirrorSnapshot {
+	/** UI: snapshot of skeleton + agent-loaded VFS (no file hydrate). */
+	async peekMirror(): Promise<VfsMirrorSnapshot> {
 		return this.controller.peekMirror();
 	}
 

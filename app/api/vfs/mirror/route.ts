@@ -35,7 +35,7 @@ function parseVfsMirrorRequest(url: URL): VfsSession | { error: string } {
 
 /**
  * Read-only mirror of the in-memory VFS for the UI.
- * Never hydrates from the DB — only reflects what the agent has already loaded.
+ * Mounts the persona directory skeleton; never hydrates file contents from the DB.
  */
 export async function GET(request: Request) {
 	const url = new URL(request.url);
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
 				...store.peekRead(path),
 			});
 		}
-		return NextResponse.json(store.peekMirror());
+		return NextResponse.json(await store.peekMirror());
 	} catch (error) {
 		const message =
 			error instanceof Error ? error.message : "Failed to mirror VFS";

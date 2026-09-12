@@ -1,5 +1,5 @@
 import { initialTargetPaths, VfsDbAdapter } from "@/lib/vfs/adapter";
-import { listFromIndex } from "@/lib/vfs/directory-index";
+import { indexDirectoryPath, listFromIndex } from "@/lib/vfs/directory-index";
 import { VfsHeuristicProcessor } from "@/lib/vfs/heuristic";
 import { VfsPath } from "@/lib/vfs/paths";
 import type {
@@ -13,7 +13,7 @@ import type {
 	VfsWriteResult,
 } from "@/lib/vfs/types";
 
-/** Read-only UI snapshot of whatever the agent has already loaded into the VFS. */
+/** Read-only UI snapshot of the session skeleton + agent-loaded VFS. */
 export type VfsMirrorSnapshot = {
 	/** Changes when index or hydrated file set changes. */
 	revision: string;
@@ -28,22 +28,46 @@ export class VfsController {
 	protected readonly directoryIndex: VfsDirectoryIndex; // index of all directories by path (lookup)
 	private readonly adapter: VfsDbAdapter; // adapter DB <-> VFS memory bridge
 	private readonly heuristic: VfsHeuristicProcessor; // heuristic insertions into DB for agent output
-	private initialHydrationDone = false;
+	private skeletonMounted = false;
+	/** Session bootstrap (skeleton + initial target hydrate). Started in the constructor. */
+	private readonly boot: Promise<void>;
 
 	constructor(private readonly session: VfsSession) {
 		this.fsMap = new Map();
 		this.directoryIndex = new Map();
 		this.adapter = new VfsDbAdapter(this.fsMap, this.directoryIndex, session);
 		this.heuristic = new VfsHeuristicProcessor(this.adapter);
+		this.boot = this.runInitialHydrate();
 	}
 
-	async ensureHydrated(): Promise<void> {
-		if (this.initialHydrationDone) {
+	/**
+	 * Mount persona directory skeleton only (no domain file contents).
+	 * e.g. CUSTOMER → marketplace/agent-output, marketplace/customers/{id}
+	 */
+	async ensureSkeleton(): Promise<void> {
+		if (this.skeletonMounted) {
 			return;
 		}
 		const targetPaths = await initialTargetPaths(this.session);
+		for (const path of targetPaths) {
+			const normalized = VfsPath.normalize(path);
+			if (VfsPath.isDirectory(normalized)) {
+				indexDirectoryPath(this.directoryIndex, normalized);
+			}
+		}
+		this.skeletonMounted = true;
+	}
+
+	/** Initial session hydrate — started once from the constructor via `boot`. */
+	private async runInitialHydrate(): Promise<void> {
+		await this.ensureSkeleton();
+		const targetPaths = await initialTargetPaths(this.session);
 		await this.adapter.hydrate({ ...this.session, targetPaths });
-		this.initialHydrationDone = true;
+	}
+
+	/** Await constructor bootstrap (idempotent). */
+	async ensureHydrated(): Promise<void> {
+		await this.boot;
 	}
 
 	async read(path: VfsPathString): Promise<string> {
@@ -119,7 +143,7 @@ export class VfsController {
 	reset(): void {
 		this.fsMap.clear();
 		this.directoryIndex.clear();
-		this.initialHydrationDone = false;
+		this.skeletonMounted = false;
 	}
 
 	/**
@@ -131,10 +155,11 @@ export class VfsController {
 	}
 
 	/**
-	 * UI mirror: full known tree + which files have content in memory.
-	 * Does not hydrate from the DB.
+	 * UI mirror: session skeleton + initially hydrated / agent-loaded nodes.
+	 * Waits for constructor bootstrap; does not hydrate further on peek.
 	 */
-	peekMirror(): VfsMirrorSnapshot {
+	async peekMirror(): Promise<VfsMirrorSnapshot> {
+		await this.boot;
 		const entriesByDirectory: Record<string, VfsListEntry[]> = {};
 		for (const dirPath of this.directoryIndex.keys()) {
 			entriesByDirectory[dirPath] = listFromIndex(

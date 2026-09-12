@@ -218,7 +218,7 @@ export function VfsTree({
 			{error ? <p className="px-2 text-destructive text-xs">{error}</p> : null}
 			{!hasAnyChildren ? (
 				<p className="px-2 text-muted-foreground text-xs">
-					Empty mirror — waiting for the agent to explore the VFS.
+					Mounting session folders…
 				</p>
 			) : null}
 			<VfsTreeView
