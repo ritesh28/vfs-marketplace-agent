@@ -1,4 +1,6 @@
-export type Role = "customer" | "seller" | "support";
+import type { Role, TicketStatus } from "@/lib/db/types";
+
+export type { Role, TicketStatus };
 
 export type AiProvider = "openai" | "gemini" | "anthropic";
 
@@ -20,5 +22,5 @@ export type TicketSummary = {
   label: string;
   customerId: string;
   orderId: string;
-  status: "open" | "in-progress" | "resolved";
+  status: TicketStatus;
 };
