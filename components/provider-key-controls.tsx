@@ -15,13 +15,9 @@ import {
 	saveApiKey,
 	saveProvider,
 } from "@/lib/provider-storage";
-import type { AiProvider } from "@/lib/types";
+import { type AiProvider, providerModelLabel } from "@/lib/types";
 
-const PROVIDER_LABELS: Record<AiProvider, string> = {
-	openai: "OpenAI",
-	gemini: "Gemini",
-	anthropic: "Anthropic",
-};
+const PROVIDERS: AiProvider[] = ["openai", "gemini", "anthropic"];
 
 export function ProviderKeyControls() {
 	const [provider, setProvider] = useState<AiProvider>("openai");
@@ -52,13 +48,13 @@ export function ProviderKeyControls() {
 				onValueChange={handleProviderChange}
 				value={hydrated ? provider : "openai"}
 			>
-				<SelectTrigger aria-label="AI provider" className="w-[140px]" size="sm">
+				<SelectTrigger aria-label="AI provider" className="w-[260px]" size="sm">
 					<SelectValue placeholder="Provider" />
 				</SelectTrigger>
 				<SelectContent>
-					{(Object.keys(PROVIDER_LABELS) as AiProvider[]).map((id) => (
+					{PROVIDERS.map((id) => (
 						<SelectItem key={id} value={id}>
-							{PROVIDER_LABELS[id]}
+							{providerModelLabel(id)}
 						</SelectItem>
 					))}
 				</SelectContent>
