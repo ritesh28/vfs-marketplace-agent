@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
 	Select,
@@ -9,6 +9,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { DB_REFRESH_EVENT } from "@/lib/client-events";
 
 type RowsResponse = {
 	table: string;
@@ -23,6 +24,17 @@ export function DatabaseTab() {
 	const [error, setError] = useState<string | null>(null);
 	const [loadingTables, setLoadingTables] = useState(true);
 	const [loadingRows, setLoadingRows] = useState(false);
+	const [refreshToken, setRefreshToken] = useState(0);
+
+	useEffect(() => {
+		function onRefresh() {
+			setRefreshToken((current) => current + 1);
+		}
+		window.addEventListener(DB_REFRESH_EVENT, onRefresh);
+		return () => {
+			window.removeEventListener(DB_REFRESH_EVENT, onRefresh);
+		};
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -69,24 +81,16 @@ export function DatabaseTab() {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [refreshToken]);
 
-	useEffect(() => {
-		if (!table) {
-			setRows([]);
-			setColumns([]);
-			return;
-		}
-
-		let cancelled = false;
-
-		async function loadRows() {
+	const loadRows = useCallback(
+		async (selectedTable: string, signal?: { cancelled: boolean }) => {
 			setLoadingRows(true);
 			setError(null);
 
 			try {
 				const response = await fetch(
-					`/api/db/rows?table=${encodeURIComponent(table)}`,
+					`/api/db/rows?table=${encodeURIComponent(selectedTable)}`,
 				);
 				const data = (await response.json()) as RowsResponse & {
 					error?: string;
@@ -96,7 +100,7 @@ export function DatabaseTab() {
 					throw new Error(data.error ?? "Failed to load rows");
 				}
 
-				if (cancelled) {
+				if (signal?.cancelled) {
 					return;
 				}
 
@@ -104,7 +108,7 @@ export function DatabaseTab() {
 				setRows(nextRows);
 				setColumns(nextRows[0] ? Object.keys(nextRows[0]) : []);
 			} catch (loadError) {
-				if (!cancelled) {
+				if (!signal?.cancelled) {
 					setError(
 						loadError instanceof Error
 							? loadError.message
@@ -114,18 +118,28 @@ export function DatabaseTab() {
 					setColumns([]);
 				}
 			} finally {
-				if (!cancelled) {
+				if (!signal?.cancelled) {
 					setLoadingRows(false);
 				}
 			}
+		},
+		[],
+	);
+
+	useEffect(() => {
+		if (!table) {
+			setRows([]);
+			setColumns([]);
+			return;
 		}
 
-		void loadRows();
+		const signal = { cancelled: false };
+		void loadRows(table, signal);
 
 		return () => {
-			cancelled = true;
+			signal.cancelled = true;
 		};
-	}, [table]);
+	}, [table, refreshToken, loadRows]);
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-3 p-3">

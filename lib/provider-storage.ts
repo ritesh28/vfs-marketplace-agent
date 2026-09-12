@@ -1,3 +1,4 @@
+import { notifyProviderSettingsChanged } from "@/lib/client-events";
 import type { AiProvider } from "@/lib/types";
 
 const PROVIDER_KEY = "vfs-marketplace:ai-provider";
@@ -30,6 +31,7 @@ export function saveProvider(provider: AiProvider) {
 	}
 
 	window.localStorage.setItem(PROVIDER_KEY, provider);
+	notifyProviderSettingsChanged();
 }
 
 export function loadApiKey(): string {
@@ -46,6 +48,7 @@ export function saveApiKey(apiKey: string) {
 	}
 
 	window.localStorage.setItem(API_KEY_KEY, apiKey);
+	notifyProviderSettingsChanged();
 }
 
 export function loadProviderSettings(): {
