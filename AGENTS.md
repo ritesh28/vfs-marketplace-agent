@@ -6,6 +6,8 @@ There is **one agent only** — no subagents.
 
 The VFS uses **lazy loading**: load nodes on demand for the **active role** (`CUSTOMER` | `SELLER` | `SUPPORT`) and persona (and for support: the selected ticket). Use `list_directory` to reveal folder contents — do not assume a folder is empty until you have listed it.
 
+Runtime system prompt: [lib/agent/system-instructions.md](./lib/agent/system-instructions.md) (keep in sync with this file).
+
 ---
 
 ## Tools
@@ -24,7 +26,7 @@ The VFS uses **lazy loading**: load nodes on demand for the **active role** (`CU
 
 ### `write` (create new file only)
 
-- Provide **both** `path` and **JSON content**.
+- Provide **both** `path` and **JSON content** (string).
 - **No overwrite**, **no append**, **no rename**.
 - Path must match `marketplace/agent-output/output-{n}.json` (`n` = 1, 2, 3, …).
 
@@ -37,9 +39,9 @@ There is **no** `modify` tool and **no** rename tool.
 
 ### `search`
 
-- Signature: `search(query, directory-path)` — **both required**.
+- Signature: `search(query, directoryPath)` — **both required**.
 - `query` — case-insensitive **substring / contains** over file contents under the directory.
-- `directory-path` — any **allowed directory**. If not loaded, the system loads it first, then searches.
+- `directoryPath` — any **allowed directory**. If not loaded, the system loads it first, then searches.
 - Returns matching file paths and snippets. Does not write or rename.
 
 Every successful heuristic DB change emits an `events` row (append-only alongside direct DB updates; not event-sourced).
@@ -51,8 +53,10 @@ Every successful heuristic DB change emits an `events` row (append-only alongsid
 Before any create or change:
 
 - Reject invalid values (e.g. invalid email).
-- Reject sexual, derogatory, offensive, or non-decent content.
+- Reject sexual, derogatory, offensive, abusive, absurd, or non-decent content.
+- If the user request violates policy or the email is invalid when changing email: **ask them to review** — do not write.
 - Respect the active persona allow list; refuse and explain if outside it.
+- Tool paths outside the allowlist are rejected; the agent must supply a valid allowlisted path.
 
 ---
 
@@ -62,6 +66,8 @@ Before any create or change:
 | --- | --- |
 | `CUSTOMER` / `SELLER` | User picks role, then a seeded persona UUID. |
 | `SUPPORT` | Support persona auto-selected; user picks a **ticket**. VFS mounts related customer, order, ticket, and matching seller/product paths under normal ownership paths. |
+
+Chat requires a complete session (`role` + `personaId`; SUPPORT also needs `ticketId`) plus a provider API key.
 
 ---
 
@@ -184,6 +190,7 @@ Writes = create a new `output-N.json` under `marketplace/agent-output/`.
 
 ## Related
 
+- [scratch/agent-implementation.md](./scratch/agent-implementation.md) — agent chat + tools plan
 - [scratch/vfs-implementation.md](./scratch/vfs-implementation.md) — VFS technical plan / implementation notes
 - [lib/vfs/](./lib/vfs/) — VFS runtime (`controller`, `adapter`, `store`, path gate)
 - [scratch/ideasV2.md](./scratch/ideasV2.md) — product/tech idea doc
