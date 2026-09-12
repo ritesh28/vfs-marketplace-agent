@@ -396,7 +396,7 @@ export class VfsDbAdapter {
 	}
 }
 
-/** Initial target paths for a session (skeleton). */
+/** Initial target paths for a session. */
 export async function initialTargetPaths(
 	session: VfsSession,
 ): Promise<VfsPathString[]> {

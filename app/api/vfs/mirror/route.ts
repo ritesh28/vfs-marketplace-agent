@@ -35,7 +35,7 @@ function parseVfsMirrorRequest(url: URL): VfsSession | { error: string } {
 
 /**
  * Read-only mirror of the in-memory VFS for the UI.
- * Mounts the persona directory skeleton; never hydrates file contents from the DB.
+ * Mounts `initialTargetPaths` directories; never hydrates file contents from the DB.
  */
 export async function GET(request: Request) {
 	const url = new URL(request.url);

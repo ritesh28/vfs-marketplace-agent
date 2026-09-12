@@ -50,7 +50,7 @@ export class VfsStore {
 		}
 	}
 
-	/** UI: snapshot of skeleton + agent-loaded VFS (no file hydrate). */
+	/** UI: snapshot of `initialTargetPaths` + agent-loaded VFS (no file hydrate). */
 	async peekMirror(): Promise<VfsMirrorSnapshot> {
 		return this.controller.peekMirror();
 	}

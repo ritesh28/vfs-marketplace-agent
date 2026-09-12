@@ -13,7 +13,7 @@ import type {
 	VfsWriteResult,
 } from "@/lib/vfs/types";
 
-/** Read-only UI snapshot of the session skeleton + agent-loaded VFS. */
+/** Read-only UI snapshot of `initialTargetPaths` + agent-loaded VFS. */
 export type VfsMirrorSnapshot = {
 	/** Changes when index or hydrated file set changes. */
 	revision: string;
@@ -28,8 +28,8 @@ export class VfsController {
 	protected readonly directoryIndex: VfsDirectoryIndex; // index of all directories by path (lookup)
 	private readonly adapter: VfsDbAdapter; // adapter DB <-> VFS memory bridge
 	private readonly heuristic: VfsHeuristicProcessor; // heuristic insertions into DB for agent output
-	private skeletonMounted = false;
-	/** Session bootstrap (skeleton + initial target hydrate). Started in the constructor. */
+	private initialTargetPathsMounted = false;
+	/** Session bootstrap: mount `initialTargetPaths` directories only. Started in the constructor. */
 	private readonly boot: Promise<void>;
 
 	constructor(private readonly session: VfsSession) {
@@ -37,15 +37,16 @@ export class VfsController {
 		this.directoryIndex = new Map();
 		this.adapter = new VfsDbAdapter(this.fsMap, this.directoryIndex, session);
 		this.heuristic = new VfsHeuristicProcessor(this.adapter);
-		this.boot = this.runInitialHydrate();
+		this.boot = this.ensureInitialTargetPaths();
 	}
 
 	/**
-	 * Mount persona directory skeleton only (no domain file contents).
-	 * e.g. CUSTOMER → marketplace/agent-output, marketplace/customers/{id}
+	 * Mount `initialTargetPaths` directories only (no domain file contents).
+	 * e.g. CUSTOMER → marketplace / agent-output / customers / customers/{id}.
+	 * Does not load profile.md, products/, orders/, etc. — those appear when the agent lists/reads.
 	 */
-	async ensureSkeleton(): Promise<void> {
-		if (this.skeletonMounted) {
+	async ensureInitialTargetPaths(): Promise<void> {
+		if (this.initialTargetPathsMounted) {
 			return;
 		}
 		const targetPaths = await initialTargetPaths(this.session);
@@ -55,17 +56,10 @@ export class VfsController {
 				indexDirectoryPath(this.directoryIndex, normalized);
 			}
 		}
-		this.skeletonMounted = true;
+		this.initialTargetPathsMounted = true;
 	}
 
-	/** Initial session hydrate — started once from the constructor via `boot`. */
-	private async runInitialHydrate(): Promise<void> {
-		await this.ensureSkeleton();
-		const targetPaths = await initialTargetPaths(this.session);
-		await this.adapter.hydrate({ ...this.session, targetPaths });
-	}
-
-	/** Await constructor bootstrap (idempotent). */
+	/** Await constructor `initialTargetPaths` mount (idempotent). JIT hydrate stays on list/read. */
 	async ensureHydrated(): Promise<void> {
 		await this.boot;
 	}
@@ -143,7 +137,7 @@ export class VfsController {
 	reset(): void {
 		this.fsMap.clear();
 		this.directoryIndex.clear();
-		this.skeletonMounted = false;
+		this.initialTargetPathsMounted = false;
 	}
 
 	/**
@@ -155,8 +149,8 @@ export class VfsController {
 	}
 
 	/**
-	 * UI mirror: session skeleton + initially hydrated / agent-loaded nodes.
-	 * Waits for constructor bootstrap; does not hydrate further on peek.
+	 * UI mirror: `initialTargetPaths` directories + anything the agent has loaded since.
+	 * Does not hydrate further from the DB.
 	 */
 	async peekMirror(): Promise<VfsMirrorSnapshot> {
 		await this.boot;

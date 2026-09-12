@@ -218,7 +218,7 @@ export function VfsTree({
 			{error ? <p className="px-2 text-destructive text-xs">{error}</p> : null}
 			{!hasAnyChildren ? (
 				<p className="px-2 text-muted-foreground text-xs">
-					Mounting session folders…
+					Loading session folders…
 				</p>
 			) : null}
 			<VfsTreeView
