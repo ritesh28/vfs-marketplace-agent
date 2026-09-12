@@ -7,12 +7,11 @@ import type { Role } from "@/lib/db/types";
 export type VfsEntityId = string;
 
 /** Expand `{id}` → entity id and `{n}` → number in path pattern strings. */
-type ExpandPlaceholders<S extends string> =
-  S extends `${infer A}{id}${infer B}`
-    ? `${A}${VfsEntityId}${ExpandPlaceholders<B>}`
-    : S extends `${infer A}{n}${infer B}`
-      ? `${A}${number}${ExpandPlaceholders<B>}`
-      : S;
+type ExpandPlaceholders<S extends string> = S extends `${infer A}{id}${infer B}`
+	? `${A}${VfsEntityId}${ExpandPlaceholders<B>}`
+	: S extends `${infer A}{n}${infer B}`
+		? `${A}${number}${ExpandPlaceholders<B>}`
+		: S;
 
 /**
  * Allowed VFS path patterns (no leading slash).
@@ -20,37 +19,37 @@ type ExpandPlaceholders<S extends string> =
  * Single source of truth for types + runtime matching.
  */
 export const VFS_DIRECTORY_PATHS = [
-  "marketplace",
-  "marketplace/sellers",
-  "marketplace/sellers/{id}",
-  "marketplace/sellers/{id}/products",
-  "marketplace/customers",
-  "marketplace/customers/{id}",
-  "marketplace/customers/{id}/orders",
-  "marketplace/customers/{id}/support",
-  "marketplace/agent-output",
+	"marketplace",
+	"marketplace/sellers",
+	"marketplace/sellers/{id}",
+	"marketplace/sellers/{id}/products",
+	"marketplace/customers",
+	"marketplace/customers/{id}",
+	"marketplace/customers/{id}/orders",
+	"marketplace/customers/{id}/support",
+	"marketplace/agent-output",
 ] as const;
 
 export const VFS_DOMAIN_FILE_PATHS = [
-  "marketplace/sellers/{id}/profile.md",
-  "marketplace/sellers/{id}/products/{id}.md",
-  "marketplace/customers/{id}/profile.md",
-  "marketplace/customers/{id}/orders/{id}.md",
-  "marketplace/customers/{id}/support/{id}.md",
+	"marketplace/sellers/{id}/profile.md",
+	"marketplace/sellers/{id}/products/{id}.md",
+	"marketplace/customers/{id}/profile.md",
+	"marketplace/customers/{id}/orders/{id}.md",
+	"marketplace/customers/{id}/support/{id}.md",
 ] as const;
 
 export const VFS_AGENT_OUTPUT_FILE_PATHS = [
-  "marketplace/agent-output/output-{n}.json",
+	"marketplace/agent-output/output-{n}.json",
 ] as const;
 
 export type VfsDirectoryPath = ExpandPlaceholders<
-  (typeof VFS_DIRECTORY_PATHS)[number]
+	(typeof VFS_DIRECTORY_PATHS)[number]
 >;
 export type VfsDomainFilePath = ExpandPlaceholders<
-  (typeof VFS_DOMAIN_FILE_PATHS)[number]
+	(typeof VFS_DOMAIN_FILE_PATHS)[number]
 >;
 export type VfsAgentOutputPath = ExpandPlaceholders<
-  (typeof VFS_AGENT_OUTPUT_FILE_PATHS)[number]
+	(typeof VFS_AGENT_OUTPUT_FILE_PATHS)[number]
 >;
 
 /** Allowed file or directory path in the marketplace VFS. */
@@ -73,63 +72,63 @@ export type VfsDirEntryToken = `file:${string}` | `directory:${string}`;
 export type VfsDirectoryIndex = Map<VfsPath, Set<VfsDirEntryToken>>;
 
 export type FileKind =
-  | "seller-profile"
-  | "seller-product"
-  | "customer-profile"
-  | "customer-order"
-  | "customer-ticket"
-  | "agent-output";
+	| "seller-profile"
+	| "seller-product"
+	| "customer-profile"
+	| "customer-order"
+	| "customer-ticket"
+	| "agent-output";
 
 export type DomainFileKind = Exclude<FileKind, "agent-output">;
 
 export type VfsSession = {
-  role: Role;
-  personaId: string;
-  ticketId: string | null;
+	role: Role;
+	personaId: string;
+	ticketId: string | null;
 };
 
 export type VfsHydrateContext = VfsSession & {
-  targetPaths: VfsPath[];
+	targetPaths: VfsPath[];
 };
 
 export type VfsListEntry = {
-  name: string;
-  kind: "file" | "directory";
-  path: VfsPath;
+	name: string;
+	kind: "file" | "directory";
+	path: VfsPath;
 };
 
 export type VfsSearchQuery = {
-  query: string;
-  directoryPath: VfsPath;
+	query: string;
+	directoryPath: VfsPath;
 };
 
 export type VfsSearchHit = {
-  path: VfsPath;
-  match: string;
+	path: VfsPath;
+	match: string;
 };
 
 export type VfsFilePermissions = {
-  read: boolean;
-  write: boolean;
+	read: boolean;
+	write: boolean;
 };
 
 export type VfsMarkdownFrontmatter = {
-  path: VfsPath;
-  "resource-type": DomainFileKind;
-  created_at: string;
-  permissions: VfsFilePermissions;
+	path: VfsPath;
+	"resource-type": DomainFileKind;
+	created_at: string;
+	permissions: VfsFilePermissions;
 };
 
 /** Agent JSON payload — kebab-case keys. DB columns stay snake_case (e.g. email_id). */
 export type CustomerProfileEditPayload = {
-  "customer-id": string;
-  "column-name": "name" | "email_id";
-  "updated-value": string;
+	"customer-id": string;
+	"column-name": "name" | "email_id";
+	"updated-value": string;
 };
 
 /** Result of a successful `write` tool call (returned to the LLM). */
 export type VfsWriteResult = {
-  success: true;
+	success: true;
 };
 
 export type VfsToolName = "list_directory" | "read" | "write" | "search";

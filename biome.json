@@ -1,0 +1,32 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+	"files": {
+		"includes": ["lib/**", "components/**", "app/**", "scripts/**"]
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"useSortedAttributes": "on"
+			}
+		}
+	},
+	"linter": {
+		"rules": {
+			"nursery": {
+				"useSortedClasses": {
+					"fix": "safe",
+					"level": "warn",
+					"options": {
+						"attributes": ["classList"],
+						"functions": ["clsx", "cva", "cn", "tv", "tw"]
+					}
+				}
+			}
+		}
+	}
+}

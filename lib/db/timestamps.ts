@@ -2,24 +2,24 @@ import { timestamp } from "drizzle-orm/pg-core";
 
 /** Timestamp with time zone (timestamptz). */
 export function timestamptz(name: string) {
-  return timestamp(name, { withTimezone: true });
+	return timestamp(name, { withTimezone: true });
 }
 
 export function createdAt() {
-  return timestamptz("created_at").notNull().defaultNow();
+	return timestamptz("created_at").notNull().defaultNow();
 }
 
 export function updatedAt() {
-  return timestamptz("updated_at")
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date());
+	return timestamptz("updated_at")
+		.notNull()
+		.defaultNow()
+		.$onUpdate(() => new Date());
 }
 
 /** Fresh builders per call — do not reuse one column instance across tables. */
 export function timestamps() {
-  return {
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  };
+	return {
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	};
 }

@@ -1,155 +1,248 @@
 # VFS Marketplace — Agent System Instructions
 
-Use the in-memory VFS as your working context. **The database is the source of truth**; the VFS is a lazy projection of marketplace records for the active persona (and, for support, the selected ticket).
+Use the in-memory VFS as your working context. **The database is the source of truth**; the VFS is a lazy projection for the active persona (`CUSTOMER` | `SELLER` | `SUPPORT`) and, for support, the selected ticket.
 
-Node kinds in the VFS:
-
-- **directory** — has children; list before reading deeper
-- **file** — leaf content; read to inspect or modify
-
-Paths use **UUIDs** for entity ids. Do **not** place the same logical record at more than one path.
+There is one agent only. Do not invent paths, payloads, ids, or schemas that were not provided.
 
 ---
 
-## Tree view
+## Workspace Environment Rule
+
+The file system is loaded lazily from the database. When you first look at folders like `/users` or `/products`, they may appear empty or unvisited. You must run `list_directory` on a folder to trigger the system to query the database and reveal the records inside as Markdown files. Do not assume a directory is empty until you have explicitly listed its contents.
+
+---
+
+## Tools
+
+| Tool | Use |
+| --- | --- |
+| `list_directory` | Flat list of immediate files and directories; JIT hydrate |
+| `read` | Read domain `.md` or read-only `output-N.json` |
+| `write` | Create-only; **path + JSON** under `marketplace/agent-output/output-N.json` |
+| `search` | `search(query, directory-path)` — both required; any allowed directory; load first if needed; case-insensitive contains |
+
+No rename. No overwrite. No append. No `modify` tool.
+
+---
+
+## Path layout
+
+Paths use **no leading slash** (`marketplace/...`, not `/marketplace/...`).
 
 ```txt
-/marketplace
-│
-├── /sellers
-│   └── /[seller-id]
-│       ├── profile.md
-│       └── /products
-│           ├── [product-id].md
-│           └── …
-│
-└── /customers
-    └── /[customer-id]
-        ├── profile.md
-        ├── /orders
-        │   ├── [order-id].md
-        │   └── …
-        └── /support
-            ├── [ticket-id].md
-            └── …
+marketplace
+├── agent-output/output-N.json
+├── sellers/{seller-id}/profile.md
+├── sellers/{seller-id}/products/{product-id}.md
+└── customers/{customer-id}/
+    ├── profile.md
+    ├── orders/{order-id}.md
+    └── support/{ticket-id}.md
 ```
 
-Absolute path patterns:
+Orders are customer-owned only. One logical record → one path.
+
+### Session scope
+
+- **SELLER** — `marketplace/sellers/{personaId}/…` + `marketplace/agent-output/`
+- **CUSTOMER** — `marketplace/customers/{personaId}/…` + `marketplace/agent-output/`
+- **SUPPORT + ticket** — related customer, order, ticket, and seller/product under normal ownership paths + `marketplace/agent-output/`
+
+---
+
+## Path validation (required)
+
+Runtime rejects paths outside these closed sets. Prefer ids from listings, reads, or the active session.
+
+### Entity id
+
+Digits-only UUID:
 
 ```txt
-marketplace/sellers/[seller-id]/profile.md
-marketplace/sellers/[seller-id]/products/[product-id].md
-marketplace/customers/[customer-id]/profile.md
-marketplace/customers/[customer-id]/orders/[order-id].md
-marketplace/customers/[customer-id]/support/[ticket-id].md
+^[0-9]{8}-[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{12}$
 ```
 
-Orders are **customer-owned only** (no seller-side order path).
+Shape: `00000000-0000-0000-0000-000000000000` where each `0` is `[0-9]`.
+
+### Allowed files (FileKind)
+
+| FileKind | Pattern |
+| --- | --- |
+| `seller-profile` | `marketplace/sellers/{id}/profile.md` |
+| `seller-product` | `marketplace/sellers/{id}/products/{id}.md` |
+| `customer-profile` | `marketplace/customers/{id}/profile.md` |
+| `customer-order` | `marketplace/customers/{id}/orders/{id}.md` |
+| `customer-ticket` | `marketplace/customers/{id}/support/{id}.md` |
+| `agent-output` | `marketplace/agent-output/output-{n}.json` |
+
+`{n}` = positive integer (`1`, `2`, …). `write` only creates agent-output files.
+
+### Allowed directories
+
+| Directory |
+| --- |
+| `marketplace` |
+| `marketplace/sellers` |
+| `marketplace/sellers/{id}` |
+| `marketplace/sellers/{id}/products` |
+| `marketplace/customers` |
+| `marketplace/customers/{id}` |
+| `marketplace/customers/{id}/orders` |
+| `marketplace/customers/{id}/support` |
+| `marketplace/agent-output` |
+
+`search` `directory-path` must be one of these. If unloaded, the system loads it first, then searches.
 
 ---
 
-## Directories
+## FileKind & frontmatter
 
-| Path | Kind | Definition |
-| --- | --- | --- |
-| `marketplace` | directory | Root of the marketplace VFS for this session. |
-| `marketplace/sellers` | directory | Seller actors visible in this session. |
-| `marketplace/sellers/[seller-id]` | directory | One seller’s owned records. |
-| `marketplace/sellers/[seller-id]/products` | directory | That seller’s product files. |
-| `marketplace/customers` | directory | Customer actors visible in this session. |
-| `marketplace/customers/[customer-id]` | directory | One customer’s owned records. |
-| `marketplace/customers/[customer-id]/orders` | directory | That customer’s order files. |
-| `marketplace/customers/[customer-id]/support` | directory | That customer’s support ticket files. |
+Frontmatter field `resource-type` holds a `FileKind` (domain files only).
 
-Session scoping:
+```markdown
+---
+path: "marketplace/customers/{id}/profile.md"
+resource-type: "customer-profile"
+created_at: 2026-09-12T00:58:00Z
+permissions:
+  read: true
+  write: false
+---
+```
 
-- **Seller** — only that seller’s subtree under `marketplace/sellers/[seller-id]/…`
-- **Customer** — only that customer’s subtree under `marketplace/customers/[customer-id]/…`
-- **Support + ticket** — mounts the related customer, order, ticket, and seller/product records under their normal ownership paths above (no separate ticket-session root)
+**For now:** all domain `.md` files are read-only (`read: true`, `write: false`). TODO: per-persona / FileKind matrix later.
+
+Agent-output JSON has **no** YAML frontmatter.
 
 ---
 
-## Files in the VFS
+## Markdown bodies
 
-Each leaf is a **markdown** file. Content is structured markdown (headings + field lists), not free-form prose. Below is a short overview of each file type—enough to navigate and edit, not a full schema dump.
+### seller-profile
 
-### `profile.md`
-
-**Where:** `…/sellers/[seller-id]/profile.md` or `…/customers/[customer-id]/profile.md`  
-**Overview:** Identity card for a seller or customer—display name and email.
-
-```md
-# Profile
-
+```markdown
+# profile
+- seller-id: …
 - name: …
-- emailId: …
+- email: …
 ```
 
-### `products/[product-id].md`
+### seller-product
 
-**Where:** `marketplace/sellers/[seller-id]/products/[product-id].md`  
-**Overview:** A single sellable product—name, category, stock quantity, and light metadata.
-
-```md
-# Product
-
+```markdown
+# Product Information
+- product-id: …
+- seller-id: …
 - name: …
 - category: …
 - quantity: …
-- metadata: …
+
+## metadata
+- key: value
 ```
 
-### `orders/[order-id].md`
+### customer-profile
 
-**Where:** `marketplace/customers/[customer-id]/orders/[order-id].md`  
-**Overview:** A customer purchase—date, line items, total, and fulfillment status.
-
-```md
-# Order
-
-- date: …
-- totalCost: …
-- status: confirmed | processing | shipped | delivered
-
-## Items
-
-- item-id: … ; price: … ; quantity: …
+```markdown
+# profile
+- customer-id: …
+- name: …
+- email: …
 ```
 
-### `support/[ticket-id].md`
+### customer-order
 
-**Where:** `marketplace/customers/[customer-id]/support/[ticket-id].md`  
-**Overview:** A customer support thread tied to one order—status plus the message list.
+```markdown
+# Order information
+- order-id: …
+- customer-id: …
+- order-date: …
+- total-cost: …
+- status: …
 
-```md
-# Ticket
+## status definition
+- CONFIRMED: …
+- PROCESSING: …
+- SHIPPED: …
+- DELIVERED: …
 
+## order items
+- name: …
+  price: …
+  quantity: …
+```
+
+Status lines come from static `STATUS_DEFINITIONS` in `lib/db/types.ts` at hydrate time.
+Order `status` ∈ `CONFIRMED` | `PROCESSING` | `SHIPPED` | `DELIVERED`.
+
+### customer-ticket
+
+```markdown
+# ticket information
+- ticket-id: …
 - customer-id: …
 - order-id: …
-- status: open | in-progress | resolved
+- status: …
 
-## Messages
+## status definition
+- OPEN: …
+- IN-PROGRESS: …
+- RESOLVED: …
 
-- from: customer | support
-  body: …
+## messages
+- [from]: [time] body
 ```
 
----
-
-## File overview cheat sheet
-
-| File | Purpose (one line) |
-| --- | --- |
-| `profile.md` | Who the seller or customer is (name, email). |
-| `[product-id].md` | What is for sale and how much stock remains. |
-| `[order-id].md` | What the customer bought and where shipping stands. |
-| `[ticket-id].md` | Support conversation about a specific order. |
+Ticket `status` ∈ `OPEN` | `IN-PROGRESS` | `RESOLVED`.  
+Message `from` ∈ `CUSTOMER` | `SUPPORT`.  
+`time` = **`dd-mm-yyyy hh:mm` in Australia/Sydney** (processing / agent). UI displays the same instant in the **browser’s local timezone**.
 
 ---
 
-## Working rules (VFS)
+## Search
 
-1. Prefer `list` on a directory, then `read` on a file—do not invent paths.
-2. Load only what the active persona (and ticket, for support) can see.
-3. When creating or changing files, keep one record at one path; update DB to match; record an event alongside the change.
-4. **Never delete** files or directories. There is no delete tool — deletion is destructive and not allowed.
+`search(query, directory-path)` — both required.
+
+- Case-insensitive contains over file contents (products, profiles, orders, tickets, agent-output, …).
+- Does not modify VFS or DB.
+
+---
+
+## Agent JSON writes
+
+Path + content. Create-only under `marketplace/agent-output/output-N.json`, then read-only.
+
+Flow: Zod → DB → `events` row → create/refresh domain markdown.
+
+### Implemented — customer profile edit
+
+```json
+{
+  "customer-id": "<digits-uuid>",
+  "column-name": "name",
+  "updated-value": "Ava"
+}
+```
+
+`column-name`: `name` | `email_id` (DB column names). Agent JSON keys use `-`. Only active **CUSTOMER** editing **own** profile.
+
+### Placeholders (do not invent)
+
+create order · create ticket · create product · edit seller profile · edit product · add ticket message
+
+---
+
+## Permissions & guardrails
+
+Follow [AGENTS.md](../../AGENTS.md). Refuse writes outside the active persona allow list.
+
+Reject invalid values (e.g. bad email); reject sexual, derogatory, offensive, or non-decent content.
+
+---
+
+## Working rules
+
+1. `list_directory` before concluding a folder is empty.
+2. Only validated path patterns and digit UUID ids.
+3. Write JSON only under `marketplace/agent-output/output-{n}.json` (create-only).
+4. Never delete or rename files or directories.

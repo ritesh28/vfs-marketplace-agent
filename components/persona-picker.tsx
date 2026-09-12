@@ -3,230 +3,232 @@
 import { useEffect, useState } from "react";
 
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { useSessionStore } from "@/lib/session-store";
-import { ROLES, type Persona, type Role, type TicketSummary } from "@/lib/types";
+import {
+	type Persona,
+	ROLES,
+	type Role,
+	type TicketSummary,
+} from "@/lib/types";
 
 export function PersonaPicker() {
-  const {
-    role,
-    personaId,
-    ticketId,
-    setRole,
-    setPersonaId,
-    setTicketId,
-  } = useSessionStore();
+	const { role, personaId, ticketId, setRole, setPersonaId, setTicketId } =
+		useSessionStore();
 
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [tickets, setTickets] = useState<TicketSummary[]>([]);
-  const [loadingPersonas, setLoadingPersonas] = useState(false);
-  const [loadingTickets, setLoadingTickets] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+	const [personas, setPersonas] = useState<Persona[]>([]);
+	const [tickets, setTickets] = useState<TicketSummary[]>([]);
+	const [loadingPersonas, setLoadingPersonas] = useState(false);
+	const [loadingTickets, setLoadingTickets] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!role) {
-      setPersonas([]);
-      return;
-    }
+	useEffect(() => {
+		if (!role) {
+			setPersonas([]);
+			return;
+		}
 
-    let cancelled = false;
+		let cancelled = false;
 
-    async function loadPersonas() {
-      setLoadingPersonas(true);
-      setError(null);
+		async function loadPersonas() {
+			const selectedRole = role;
+			if (!selectedRole) {
+				return;
+			}
 
-      try {
-        const response = await fetch(
-          `/api/personas?role=${encodeURIComponent(role!)}`,
-        );
-        const data = (await response.json()) as Persona[] | { error?: string };
+			setLoadingPersonas(true);
+			setError(null);
 
-        if (!response.ok) {
-          throw new Error(
-            !Array.isArray(data) && data.error
-              ? data.error
-              : "Failed to load personas",
-          );
-        }
+			try {
+				const response = await fetch(
+					`/api/personas?role=${encodeURIComponent(selectedRole)}`,
+				);
+				const data = (await response.json()) as Persona[] | { error?: string };
 
-        if (!cancelled) {
-          const next = Array.isArray(data) ? data : [];
-          setPersonas(next);
+				if (!response.ok) {
+					throw new Error(
+						!Array.isArray(data) && data.error
+							? data.error
+							: "Failed to load personas",
+					);
+				}
 
-          // Support has a single DB persona — auto-select from API, not seed IDs.
-          if (role === "SUPPORT" && next[0]) {
-            setPersonaId(next[0].id);
-          }
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setPersonas([]);
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Failed to load personas",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingPersonas(false);
-        }
-      }
-    }
+				if (!cancelled) {
+					const next = Array.isArray(data) ? data : [];
+					setPersonas(next);
 
-    void loadPersonas();
+					// Support has a single DB persona — auto-select from API, not seed IDs.
+					if (selectedRole === "SUPPORT" && next[0]) {
+						setPersonaId(next[0].id);
+					}
+				}
+			} catch (loadError) {
+				if (!cancelled) {
+					setPersonas([]);
+					setError(
+						loadError instanceof Error
+							? loadError.message
+							: "Failed to load personas",
+					);
+				}
+			} finally {
+				if (!cancelled) {
+					setLoadingPersonas(false);
+				}
+			}
+		}
 
-    return () => {
-      cancelled = true;
-    };
-    // setPersonaId is stable enough for this effect; role is the real trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+		void loadPersonas();
 
-  useEffect(() => {
-    if (role !== "SUPPORT") {
-      setTickets([]);
-      return;
-    }
+		return () => {
+			cancelled = true;
+		};
+		// setPersonaId is stable enough for this effect; role is the real trigger.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [role]);
 
-    let cancelled = false;
+	useEffect(() => {
+		if (role !== "SUPPORT") {
+			setTickets([]);
+			return;
+		}
 
-    async function loadTickets() {
-      setLoadingTickets(true);
-      setError(null);
+		let cancelled = false;
 
-      try {
-        const response = await fetch("/api/tickets");
-        const data = (await response.json()) as
-          | TicketSummary[]
-          | { error?: string };
+		async function loadTickets() {
+			setLoadingTickets(true);
+			setError(null);
 
-        if (!response.ok) {
-          throw new Error(
-            !Array.isArray(data) && data.error
-              ? data.error
-              : "Failed to load tickets",
-          );
-        }
+			try {
+				const response = await fetch("/api/tickets");
+				const data = (await response.json()) as
+					| TicketSummary[]
+					| { error?: string };
 
-        if (!cancelled) {
-          setTickets(Array.isArray(data) ? data : []);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setTickets([]);
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "Failed to load tickets",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingTickets(false);
-        }
-      }
-    }
+				if (!response.ok) {
+					throw new Error(
+						!Array.isArray(data) && data.error
+							? data.error
+							: "Failed to load tickets",
+					);
+				}
 
-    void loadTickets();
+				if (!cancelled) {
+					setTickets(Array.isArray(data) ? data : []);
+				}
+			} catch (loadError) {
+				if (!cancelled) {
+					setTickets([]);
+					setError(
+						loadError instanceof Error
+							? loadError.message
+							: "Failed to load tickets",
+					);
+				}
+			} finally {
+				if (!cancelled) {
+					setLoadingTickets(false);
+				}
+			}
+		}
 
-    return () => {
-      cancelled = true;
-    };
-  }, [role]);
+		void loadTickets();
 
-  const supportPersona = personas[0];
+		return () => {
+			cancelled = true;
+		};
+	}, [role]);
 
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-      <Select
-        value={role ?? undefined}
-        onValueChange={(value) => setRole(value as Role)}
-      >
-        <SelectTrigger size="sm" className="w-[140px]" aria-label="Role">
-          <SelectValue placeholder="Select role" />
-        </SelectTrigger>
-        <SelectContent>
-          {ROLES.map((id) => (
-            <SelectItem key={id} value={id}>
-              {id.charAt(0) + id.slice(1).toLowerCase()}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+	const supportPersona = personas[0];
 
-      {role === "SUPPORT" ? (
-        <>
-          <Select value={personaId ?? supportPersona?.id} disabled>
-            <SelectTrigger
-              size="sm"
-              className="w-[180px]"
-              aria-label="Support persona"
-            >
-              <SelectValue
-                placeholder={loadingPersonas ? "Loading…" : "Support"}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {supportPersona ? (
-                <SelectItem value={supportPersona.id}>
-                  {supportPersona.name}
-                </SelectItem>
-              ) : null}
-            </SelectContent>
-          </Select>
-          <Select
-            value={ticketId ?? undefined}
-            onValueChange={(value) => setTicketId(value)}
-            disabled={loadingTickets || tickets.length === 0}
-          >
-            <SelectTrigger size="sm" className="w-[280px]" aria-label="Ticket">
-              <SelectValue
-                placeholder={
-                  loadingTickets ? "Loading tickets…" : "Select ticket"
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {tickets.map((ticket) => (
-                <SelectItem key={ticket.id} value={ticket.id}>
-                  {ticket.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </>
-      ) : role ? (
-        <Select
-          value={personaId ?? undefined}
-          onValueChange={(value) => setPersonaId(value)}
-          disabled={loadingPersonas || personas.length === 0}
-        >
-          <SelectTrigger size="sm" className="w-[180px]" aria-label="Persona">
-            <SelectValue
-              placeholder={
-                loadingPersonas ? "Loading personas…" : "Select persona"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {personas.map((persona) => (
-              <SelectItem key={persona.id} value={persona.id}>
-                {persona.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null}
+	return (
+		<div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+			<Select
+				onValueChange={(value) => setRole(value as Role)}
+				value={role ?? undefined}
+			>
+				<SelectTrigger aria-label="Role" className="w-[140px]" size="sm">
+					<SelectValue placeholder="Select role" />
+				</SelectTrigger>
+				<SelectContent>
+					{ROLES.map((id) => (
+						<SelectItem key={id} value={id}>
+							{id.charAt(0) + id.slice(1).toLowerCase()}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
 
-      {error ? (
-        <span className="text-destructive text-xs">{error}</span>
-      ) : null}
-    </div>
-  );
+			{role === "SUPPORT" ? (
+				<>
+					<Select disabled value={personaId ?? supportPersona?.id}>
+						<SelectTrigger
+							aria-label="Support persona"
+							className="w-[180px]"
+							size="sm"
+						>
+							<SelectValue
+								placeholder={loadingPersonas ? "Loading…" : "Support"}
+							/>
+						</SelectTrigger>
+						<SelectContent>
+							{supportPersona ? (
+								<SelectItem value={supportPersona.id}>
+									{supportPersona.name}
+								</SelectItem>
+							) : null}
+						</SelectContent>
+					</Select>
+					<Select
+						disabled={loadingTickets || tickets.length === 0}
+						onValueChange={(value) => setTicketId(value)}
+						value={ticketId ?? undefined}
+					>
+						<SelectTrigger aria-label="Ticket" className="w-[280px]" size="sm">
+							<SelectValue
+								placeholder={
+									loadingTickets ? "Loading tickets…" : "Select ticket"
+								}
+							/>
+						</SelectTrigger>
+						<SelectContent>
+							{tickets.map((ticket) => (
+								<SelectItem key={ticket.id} value={ticket.id}>
+									{ticket.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</>
+			) : role ? (
+				<Select
+					disabled={loadingPersonas || personas.length === 0}
+					onValueChange={(value) => setPersonaId(value)}
+					value={personaId ?? undefined}
+				>
+					<SelectTrigger aria-label="Persona" className="w-[180px]" size="sm">
+						<SelectValue
+							placeholder={
+								loadingPersonas ? "Loading personas…" : "Select persona"
+							}
+						/>
+					</SelectTrigger>
+					<SelectContent>
+						{personas.map((persona) => (
+							<SelectItem key={persona.id} value={persona.id}>
+								{persona.name}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			) : null}
+
+			{error ? <span className="text-destructive text-xs">{error}</span> : null}
+		</div>
+	);
 }

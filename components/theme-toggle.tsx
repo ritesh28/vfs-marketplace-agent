@@ -7,27 +7,25 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+	const { resolvedTheme, setTheme } = useTheme();
+	const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+	useEffect(() => {
+		setMounted(true);
+	}, []);
 
-  const isDark = resolvedTheme === "dark";
+	const isDark = resolvedTheme === "dark";
 
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      aria-label={
-        isDark ? "Switch to light mode" : "Switch to dark mode"
-      }
-      disabled={!mounted}
-    >
-      {isDark ? <SunIcon /> : <MoonIcon />}
-    </Button>
-  );
+	return (
+		<Button
+			aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+			disabled={!mounted}
+			onClick={() => setTheme(isDark ? "light" : "dark")}
+			size="icon-sm"
+			type="button"
+			variant="ghost"
+		>
+			{isDark ? <SunIcon /> : <MoonIcon />}
+		</Button>
+	);
 }

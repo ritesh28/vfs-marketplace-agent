@@ -8,25 +8,25 @@ import { RightPanel } from "@/components/right-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
-  return (
-    <div className="bg-background flex h-svh flex-col overflow-hidden">
-      <AppHeader
-        controls={
-          <>
-            <ProviderKeyControls />
-            <ThemeToggle />
-          </>
-        }
-      />
-      <PersonaPicker />
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
-        <section className="min-h-0 border-b md:border-r md:border-b-0">
-          <ChatPanel />
-        </section>
-        <section className="min-h-0">
-          <RightPanel />
-        </section>
-      </div>
-    </div>
-  );
+	return (
+		<div className="flex h-svh flex-col overflow-hidden bg-background">
+			<AppHeader
+				controls={
+					<>
+						<ProviderKeyControls />
+						<ThemeToggle />
+					</>
+				}
+			/>
+			<PersonaPicker />
+			<div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
+				<section className="min-h-0 border-b md:border-r md:border-b-0">
+					<ChatPanel />
+				</section>
+				<section className="min-h-0">
+					<RightPanel />
+				</section>
+			</div>
+		</div>
+	);
 }
