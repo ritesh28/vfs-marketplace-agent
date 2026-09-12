@@ -156,10 +156,7 @@ export class VfsController {
 		await this.boot;
 		const entriesByDirectory: Record<string, VfsListEntry[]> = {};
 		for (const dirPath of this.directoryIndex.keys()) {
-			entriesByDirectory[dirPath] = listFromIndex(
-				this.directoryIndex,
-				dirPath,
-			);
+			entriesByDirectory[dirPath] = listFromIndex(this.directoryIndex, dirPath);
 		}
 		const hydratedPaths = [...this.fsMap.keys()].sort();
 		const dirKeys = Object.keys(entriesByDirectory).sort();
@@ -178,9 +175,11 @@ export class VfsController {
 	 * UI mirror: return in-memory file content only.
 	 * Does not hydrate from the DB.
 	 */
-	peekRead(path: VfsPathString): { hydrated: true; content: string } | {
-		hydrated: false;
-	} {
+	peekRead(path: VfsPathString):
+		| { hydrated: true; content: string }
+		| {
+				hydrated: false;
+		  } {
 		const normalized = VfsPath.normalize(path);
 		const content = this.fsMap.get(normalized);
 		if (content === undefined) {

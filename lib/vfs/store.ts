@@ -56,9 +56,11 @@ export class VfsStore {
 	}
 
 	/** UI: in-memory file only (no DB hydrate). */
-	peekRead(path: string): { hydrated: true; content: string } | {
-		hydrated: false;
-	} {
+	peekRead(path: string):
+		| { hydrated: true; content: string }
+		| {
+				hydrated: false;
+		  } {
 		return this.controller.peekRead(VfsPath.normalize(path));
 	}
 

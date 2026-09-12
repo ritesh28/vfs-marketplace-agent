@@ -222,9 +222,9 @@ export function VfsTree({
 				</p>
 			) : null}
 			<VfsTreeView
-				key={treeKey}
 				expandedItems={expandedItems}
 				items={items}
+				key={treeKey}
 				onOpenFile={openFile}
 			/>
 		</div>
