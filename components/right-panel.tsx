@@ -41,6 +41,7 @@ export function RightPanel() {
 						<div className="mb-2 flex items-center gap-2">
 							<p className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">
 								{preview.path}
+								{!preview.hydrated ? " · not hydrated" : null}
 							</p>
 							<Button
 								className="shrink-0"
@@ -52,7 +53,13 @@ export function RightPanel() {
 								Close
 							</Button>
 						</div>
-						<pre className="max-h-48 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+						<pre
+							className={
+								preview.hydrated
+									? "max-h-48 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed"
+									: "max-h-48 overflow-auto rounded-md border border-dashed bg-muted/40 p-3 font-mono text-muted-foreground text-xs leading-relaxed"
+							}
+						>
 							{preview.content}
 						</pre>
 					</div>

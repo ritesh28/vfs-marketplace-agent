@@ -13,6 +13,16 @@ import type {
 	VfsWriteResult,
 } from "@/lib/vfs/types";
 
+/** Read-only UI snapshot of whatever the agent has already loaded into the VFS. */
+export type VfsMirrorSnapshot = {
+	/** Changes when index or hydrated file set changes. */
+	revision: string;
+	/** Immediate children currently known for each directory path. */
+	entriesByDirectory: Record<string, VfsListEntry[]>;
+	/** Paths present in fsMap (agent has read/written content). */
+	hydratedPaths: string[];
+};
+
 export class VfsController {
 	protected readonly fsMap: VfsFileMap; // flat map of all files by path
 	protected readonly directoryIndex: VfsDirectoryIndex; // index of all directories by path (lookup)
@@ -112,8 +122,51 @@ export class VfsController {
 		this.initialHydrationDone = false;
 	}
 
-	/** Peek index without forcing hydrate (tests / debug). */
+	/**
+	 * UI mirror: list whatever is already in the directory index.
+	 * Does not hydrate from the DB.
+	 */
 	peekList(path: VfsPathString): VfsListEntry[] {
-		return listFromIndex(this.directoryIndex, path);
+		return listFromIndex(this.directoryIndex, VfsPath.normalize(path));
+	}
+
+	/**
+	 * UI mirror: full known tree + which files have content in memory.
+	 * Does not hydrate from the DB.
+	 */
+	peekMirror(): VfsMirrorSnapshot {
+		const entriesByDirectory: Record<string, VfsListEntry[]> = {};
+		for (const dirPath of this.directoryIndex.keys()) {
+			entriesByDirectory[dirPath] = listFromIndex(
+				this.directoryIndex,
+				dirPath,
+			);
+		}
+		const hydratedPaths = [...this.fsMap.keys()].sort();
+		const dirKeys = Object.keys(entriesByDirectory).sort();
+		const revision = [
+			`d:${dirKeys.length}`,
+			...dirKeys.map(
+				(k) => `${k}=${entriesByDirectory[k]?.map((e) => e.path).join(",")}`,
+			),
+			`f:${hydratedPaths.join(",")}`,
+		].join("|");
+
+		return { revision, entriesByDirectory, hydratedPaths };
+	}
+
+	/**
+	 * UI mirror: return in-memory file content only.
+	 * Does not hydrate from the DB.
+	 */
+	peekRead(path: VfsPathString): { hydrated: true; content: string } | {
+		hydrated: false;
+	} {
+		const normalized = VfsPath.normalize(path);
+		const content = this.fsMap.get(normalized);
+		if (content === undefined) {
+			return { hydrated: false };
+		}
+		return { hydrated: true, content };
 	}
 }

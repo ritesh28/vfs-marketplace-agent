@@ -3,7 +3,7 @@
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 import { BracesIcon, FileIcon, FolderIcon, FolderOpenIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/reui/tree";
 
 import { useSessionStore } from "@/lib/session-store";
@@ -14,15 +14,25 @@ interface FileItem {
 	children?: string[];
 	type?: "directory" | "file" | "json" | "md";
 	path?: string;
+	/** File is present in fsMap (agent has loaded content). */
+	hydrated?: boolean;
 }
 
 export type VfsFilePreview = {
 	path: string;
 	content: string;
+	hydrated: boolean;
+};
+
+type MirrorSnapshot = {
+	revision: string;
+	entriesByDirectory: Record<string, VfsListEntry[]>;
+	hydratedPaths: string[];
 };
 
 const ROOT_ID = "marketplace";
 const indent = 20;
+const MIRROR_POLL_MS = 1500;
 
 function sessionQuery(
 	role: string,
@@ -50,6 +60,38 @@ function emptyRoot(): Record<string, FileItem> {
 	};
 }
 
+/** Build a full FileItem map from the mirror snapshot (no extra fetches). */
+function itemsFromMirror(snapshot: MirrorSnapshot): Record<string, FileItem> {
+	const hydrated = new Set(snapshot.hydratedPaths);
+	const items = emptyRoot();
+	const dirs = Object.keys(snapshot.entriesByDirectory);
+
+	for (const dirPath of dirs) {
+		if (!items[dirPath]) {
+			items[dirPath] = {
+				name: dirPath.split("/").pop() ?? dirPath,
+				children: [],
+				type: "directory",
+				path: dirPath,
+			};
+		}
+	}
+
+	for (const [dirPath, entries] of Object.entries(
+		snapshot.entriesByDirectory,
+	)) {
+		mergeEntries(items, dirPath, entries, hydrated);
+	}
+
+	return items;
+}
+
+function allDirectoryIds(items: Record<string, FileItem>): string[] {
+	return Object.entries(items)
+		.filter(([, item]) => item.type === "directory")
+		.map(([id]) => id);
+}
+
 export function VfsTree({
 	onFileOpen,
 }: {
@@ -57,92 +99,109 @@ export function VfsTree({
 }) {
 	const { role, personaId, ticketId } = useSessionStore();
 	const [items, setItems] = useState<Record<string, FileItem>>(emptyRoot);
+	const [revision, setRevision] = useState<string>("");
 	const [treeKey, setTreeKey] = useState(0);
 	const [error, setError] = useState<string | null>(null);
 
 	const ready = Boolean(role && personaId && (role !== "SUPPORT" || ticketId));
+	const revisionRef = useRef(revision);
+	revisionRef.current = revision;
 
 	useEffect(() => {
 		if (!ready || !role || !personaId) {
 			setItems(emptyRoot());
+			setRevision("");
 			setTreeKey((k) => k + 1);
 			return;
 		}
 
 		let cancelled = false;
 		const params = sessionQuery(role, personaId, ticketId);
-		params.set("path", ROOT_ID);
-		params.set("reset", "1");
 
-		async function loadRoot() {
-			setError(null);
+		async function pullMirror(forceKeyBump: boolean) {
 			try {
-				const res = await fetch(`/api/vfs/list?${params.toString()}`);
-				const data = (await res.json()) as {
-					entries?: VfsListEntry[];
+				const res = await fetch(`/api/vfs/mirror?${params.toString()}`);
+				const data = (await res.json()) as MirrorSnapshot & {
 					error?: string;
 				};
 				if (!res.ok) {
-					throw new Error(data.error ?? "Failed to list VFS");
+					throw new Error(data.error ?? "Failed to load VFS mirror");
 				}
 				if (cancelled) return;
 
-				const next = emptyRoot();
-				mergeEntries(next, ROOT_ID, data.entries ?? []);
+				setError(null);
+				const prevRevision = revisionRef.current;
+				if (!forceKeyBump && data.revision === prevRevision) {
+					return;
+				}
+
+				const next = itemsFromMirror(data);
 				setItems(next);
+				setRevision(data.revision);
 				setTreeKey((k) => k + 1);
 			} catch (err) {
 				if (!cancelled) {
-					setError(err instanceof Error ? err.message : "VFS load failed");
+					setError(err instanceof Error ? err.message : "VFS mirror failed");
 				}
 			}
 		}
 
-		void loadRoot();
+		void pullMirror(true);
+		const timer = setInterval(() => {
+			void pullMirror(false);
+		}, MIRROR_POLL_MS);
+
 		return () => {
 			cancelled = true;
+			clearInterval(timer);
 		};
 	}, [ready, role, personaId, ticketId]);
 
-	async function expandFolder(path: string, itemId: string) {
+	function openFile(path: string, hydrated: boolean | undefined) {
 		if (!role || !personaId) return;
-		const params = sessionQuery(role, personaId, ticketId);
-		params.set("path", path);
-		const res = await fetch(`/api/vfs/list?${params.toString()}`);
-		const data = (await res.json()) as {
-			entries?: VfsListEntry[];
-			error?: string;
-		};
-		if (!res.ok) {
-			setError(data.error ?? "Failed to list directory");
+
+		if (!hydrated) {
+			onFileOpen?.({
+				path,
+				hydrated: false,
+				content:
+					"Not hydrated yet.\n\nThis VFS panel is a read-only mirror of what the agent has requested. Open this path with the agent (list_directory / read) to load it here.",
+			});
 			return;
 		}
-		setItems((prev) => {
-			const next = { ...prev };
-			mergeEntries(next, itemId, data.entries ?? []);
-			return next;
-		});
+
+		const params = sessionQuery(role, personaId, ticketId);
+		params.set("path", path);
+		void (async () => {
+			const res = await fetch(`/api/vfs/mirror?${params.toString()}`);
+			const data = (await res.json()) as {
+				hydrated?: boolean;
+				content?: string;
+				error?: string;
+				path?: string;
+			};
+			if (!res.ok) {
+				setError(data.error ?? "Failed to peek file");
+				return;
+			}
+			if (!data.hydrated) {
+				onFileOpen?.({
+					path: data.path ?? path,
+					hydrated: false,
+					content:
+						"Not hydrated yet.\n\nThis VFS panel is a read-only mirror of what the agent has requested. Open this path with the agent (list_directory / read) to load it here.",
+				});
+				return;
+			}
+			onFileOpen?.({
+				path: data.path ?? path,
+				hydrated: true,
+				content: data.content ?? "",
+			});
+		})();
 	}
 
-	async function openFile(path: string) {
-		if (!role || !personaId) return;
-		const params = sessionQuery(role, personaId, ticketId);
-		params.set("path", path);
-		const res = await fetch(`/api/vfs/read?${params.toString()}`);
-		const data = (await res.json()) as {
-			content?: string;
-			error?: string;
-			path?: string;
-		};
-		if (!res.ok) {
-			setError(data.error ?? "Failed to read file");
-			return;
-		}
-		onFileOpen?.({
-			path: data.path ?? path,
-			content: data.content ?? "",
-		});
-	}
+	const expandedItems = useMemo(() => allDirectoryIds(items), [items]);
 
 	if (!ready) {
 		return (
@@ -152,13 +211,20 @@ export function VfsTree({
 		);
 	}
 
+	const hasAnyChildren = (items[ROOT_ID]?.children?.length ?? 0) > 0;
+
 	return (
 		<div className="flex flex-col gap-2 p-2">
 			{error ? <p className="px-2 text-destructive text-xs">{error}</p> : null}
+			{!hasAnyChildren ? (
+				<p className="px-2 text-muted-foreground text-xs">
+					Empty mirror — waiting for the agent to explore the VFS.
+				</p>
+			) : null}
 			<VfsTreeView
 				key={treeKey}
+				expandedItems={expandedItems}
 				items={items}
-				onExpandFolder={expandFolder}
 				onOpenFile={openFile}
 			/>
 		</div>
@@ -167,19 +233,19 @@ export function VfsTree({
 
 function VfsTreeView({
 	items,
-	onExpandFolder,
+	expandedItems,
 	onOpenFile,
 }: {
 	items: Record<string, FileItem>;
-	onExpandFolder: (path: string, itemId: string) => void;
-	onOpenFile: (path: string) => void;
+	expandedItems: string[];
+	onOpenFile: (path: string, hydrated: boolean | undefined) => void;
 }) {
 	const itemsRef = useRef(items);
 	itemsRef.current = items;
 
 	const tree = useTree<FileItem>({
 		initialState: {
-			expandedItems: [ROOT_ID],
+			expandedItems,
 		},
 		indent,
 		rootItemId: ROOT_ID,
@@ -192,7 +258,6 @@ function VfsTreeView({
 		features: [syncDataLoaderFeature, hotkeysCoreFeature],
 	});
 
-	// Expand/list updates mutate `items` without remounting — refresh tree cache.
 	useEffect(() => {
 		tree.rebuildTree();
 	}, [items, tree]);
@@ -204,7 +269,6 @@ function VfsTreeView({
 				const isFolder = item.isFolder();
 				const isExpanded = item.isExpanded();
 				const isJson = data.type === "json" || data.name.endsWith(".json");
-				const isMd = data.type === "md" || data.name.endsWith(".md");
 
 				return (
 					<TreeItem
@@ -212,15 +276,12 @@ function VfsTreeView({
 						key={item.getId()}
 						onClick={(event) => {
 							if (isFolder) {
-								event.stopPropagation();
-								if (!isExpanded && data.path) {
-									void onExpandFolder(data.path, item.getId());
-								}
+								// Folders only toggle expand locally — never fetch/hydrate.
 								return;
 							}
 							if (!data.path) return;
 							event.stopPropagation();
-							void onOpenFile(data.path);
+							onOpenFile(data.path, data.hydrated);
 						}}
 						onMouseDown={(event) => {
 							if (isFolder || !data.path) return;
@@ -236,13 +297,23 @@ function VfsTreeView({
 										<FolderIcon className="size-4 text-muted-foreground" />
 									)
 								) : isJson ? (
-									<BracesIcon className="size-4 text-muted-foreground" />
-								) : isMd ? (
-									<FileIcon className="size-4 text-muted-foreground" />
+									<BracesIcon
+										className={`size-4 ${data.hydrated ? "text-muted-foreground" : "text-muted-foreground/40"}`}
+									/>
 								) : (
-									<FileIcon className="size-4 text-muted-foreground" />
+									<FileIcon
+										className={`size-4 ${data.hydrated ? "text-muted-foreground" : "text-muted-foreground/40"}`}
+									/>
 								)}
-								<span className="truncate">{item.getItemName()}</span>
+								<span
+									className={
+										!isFolder && !data.hydrated
+											? "truncate text-muted-foreground/70"
+											: "truncate"
+									}
+								>
+									{item.getItemName()}
+								</span>
 							</span>
 						</TreeItemLabel>
 					</TreeItem>
@@ -256,9 +327,10 @@ function mergeEntries(
 	items: Record<string, FileItem>,
 	parentId: string,
 	entries: VfsListEntry[],
+	hydrated: Set<string>,
 ) {
 	const parent = items[parentId] ?? {
-		name: parentId,
+		name: parentId.split("/").pop() ?? parentId,
 		children: [],
 		type: "directory" as const,
 		path: parentId,
@@ -284,6 +356,7 @@ function mergeEntries(
 				name: entry.name,
 				type,
 				path: entry.path,
+				hydrated: hydrated.has(entry.path),
 			};
 		}
 	}

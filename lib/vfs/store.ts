@@ -1,4 +1,4 @@
-import { VfsController } from "@/lib/vfs/controller";
+import { VfsController, type VfsMirrorSnapshot } from "@/lib/vfs/controller";
 import { VfsPath } from "@/lib/vfs/paths";
 import { VfsSessionScope } from "@/lib/vfs/session";
 import type { VfsListEntry, VfsSession } from "@/lib/vfs/types";
@@ -30,10 +30,12 @@ export class VfsStore {
 		}
 	}
 
+	/** Agent / tools: list with JIT hydrate. */
 	async listChildren(path: string): Promise<VfsListEntry[]> {
 		return this.controller.listDirectory(VfsPath.normalize(path));
 	}
 
+	/** Agent / tools: read with JIT hydrate. */
 	async readFile(path: string): Promise<string | null> {
 		try {
 			return await this.controller.read(VfsPath.normalize(path));
@@ -46,6 +48,18 @@ export class VfsStore {
 			}
 			throw error;
 		}
+	}
+
+	/** UI: snapshot of agent-loaded VFS only (no DB hydrate). */
+	peekMirror(): VfsMirrorSnapshot {
+		return this.controller.peekMirror();
+	}
+
+	/** UI: in-memory file only (no DB hydrate). */
+	peekRead(path: string): { hydrated: true; content: string } | {
+		hydrated: false;
+	} {
+		return this.controller.peekRead(VfsPath.normalize(path));
 	}
 
 	getController(): VfsController {
