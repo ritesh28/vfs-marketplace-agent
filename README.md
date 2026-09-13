@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/ritesh28/vfs-marketplace-agent" target="_blank">
+    <img data-source="github" loading="lazy" alt="VFS Marketplace Agent" src="https://github.com/ritesh28/vfs-marketplace-agent/raw/main/public/banner.png" width="750"/>
+  </a>
+</p>
+
 # VFS Marketplace Agent
 
 A demo app that gives an AI agent a **virtual file system (VFS)** as its working surface for a small marketplace domain (sellers, customers, support).
@@ -25,18 +31,18 @@ The question this project explores:
 
 ## Direction taken
 
-| Choice | Why |
-| --- | --- |
-| **DB = source of truth**; VFS = transient projection | Avoid dual-write drift; VFS can be reset per session |
-| **Lazy / JIT hydration** by persona (+ ticket for support) | Don’t load the whole marketplace into memory or the prompt |
-| **Agent reads `.md`**, **writes `.json` under `agent-output/`** | Readable context for the model; machine-checkable mutations (Zod) |
-| **Heuristic mapper** (not free-form SQL) | Rule-based JSON → domain tables + `events` row |
-| **Event log pattern** | Append-only `events` rows recorded **alongside** each domain DB update (audit trail — not event-sourced replay) |
-| **Closed path allowlists + digit UUID ids** | Reject invented paths before any DB work |
-| **One agent** (no subagents) | Keep the demo focused on VFS-as-tool, not orchestration |
-| **Persona picker, no real auth** | Fast demo loop; permissions in instructions + runtime checks |
-| **Australia/Sydney for processing**; browser TZ for UI | Stable server-side formatting; local-friendly UI |
-| **UI mirror ≠ agent hydrate** | VFS tab polls an in-memory snapshot; agent tools JIT-hydrate the same session store |
+| Choice                                                          | Why                                                                                                             |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **DB = source of truth**; VFS = transient projection            | Avoid dual-write drift; VFS can be reset per session                                                            |
+| **Lazy / JIT hydration** by persona (+ ticket for support)      | Don’t load the whole marketplace into memory or the prompt                                                      |
+| **Agent reads `.md`**, **writes `.json` under `agent-output/`** | Readable context for the model; machine-checkable mutations (Zod)                                               |
+| **Heuristic mapper** (not free-form SQL)                        | Rule-based JSON → domain tables + `events` row                                                                  |
+| **Event log pattern**                                           | Append-only `events` rows recorded **alongside** each domain DB update (audit trail — not event-sourced replay) |
+| **Closed path allowlists + digit UUID ids**                     | Reject invented paths before any DB work                                                                        |
+| **One agent** (no subagents)                                    | Keep the demo focused on VFS-as-tool, not orchestration                                                         |
+| **Persona picker, no real auth**                                | Fast demo loop; permissions in instructions + runtime checks                                                    |
+| **Australia/Sydney for processing**; browser TZ for UI          | Stable server-side formatting; local-friendly UI                                                                |
+| **UI mirror ≠ agent hydrate**                                   | VFS tab polls an in-memory snapshot; agent tools JIT-hydrate the same session store                             |
 
 Domain state is **read as markdown** and **written as JSON** under `marketplace/agent-output/`; domain `.md` files stay read-only for now.
 
@@ -82,12 +88,12 @@ Path patterns are closed allowlists in [`lib/vfs/types.ts`](./lib/vfs/types.ts) 
 
 ### Agent tools
 
-| Tool | Behavior |
-| --- | --- |
-| `list_directory` | Flat list of immediate children; JIT hydrate |
-| `read` | Read domain `.md` or agent-output JSON |
-| `write` | Create-only `marketplace/agent-output/output-N.json` → Zod → DB + `events` → refresh `.md` |
-| `search` | Case-insensitive contains under an allowed directory |
+| Tool             | Behavior                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| `list_directory` | Flat list of immediate children; JIT hydrate                                               |
+| `read`           | Read domain `.md` or agent-output JSON                                                     |
+| `write`          | Create-only `marketplace/agent-output/output-N.json` → Zod → DB + `events` → refresh `.md` |
+| `search`         | Case-insensitive contains under an allowed directory                                       |
 
 No `modify`, rename, overwrite, or append.
 
@@ -102,10 +108,10 @@ Agent tools and the VFS mirror share one in-memory controller per session key (`
 
 ### Providers / models
 
-| Provider | Model |
-| --- | --- |
-| OpenAI | `gpt-5.6-luna` |
-| Gemini | `gemini-2.5-pro` |
+| Provider  | Model                    |
+| --------- | ------------------------ |
+| OpenAI    | `gpt-5.6-luna`           |
+| Gemini    | `gemini-2.5-pro`         |
 | Anthropic | `claude-opus-4-20250514` |
 
 Shared in [`lib/types.ts`](./lib/types.ts) (`PROVIDER_MODELS`).
@@ -117,15 +123,15 @@ Shared in [`lib/types.ts`](./lib/types.ts) (`PROVIDER_MODELS`).
 
 ### Key code
 
-| Area | Location |
-| --- | --- |
-| Agent rules | [`AGENTS.md`](./AGENTS.md), [`lib/agent/system-instructions.md`](./lib/agent/system-instructions.md) |
-| Chat route | [`app/api/chat/route.ts`](./app/api/chat/route.ts) |
-| Tools / guardrails / providers | [`lib/agent/`](./lib/agent/) |
-| VFS runtime | [`lib/vfs/`](./lib/vfs/) |
-| VFS mirror API | [`app/api/vfs/mirror/route.ts`](./app/api/vfs/mirror/route.ts) |
-| DB schema | [`lib/db/schema.ts`](./lib/db/schema.ts) |
-| PostHog | [`lib/analytics/posthog.ts`](./lib/analytics/posthog.ts) |
+| Area                           | Location                                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Agent rules                    | [`AGENTS.md`](./AGENTS.md), [`lib/agent/system-instructions.md`](./lib/agent/system-instructions.md) |
+| Chat route                     | [`app/api/chat/route.ts`](./app/api/chat/route.ts)                                                   |
+| Tools / guardrails / providers | [`lib/agent/`](./lib/agent/)                                                                         |
+| VFS runtime                    | [`lib/vfs/`](./lib/vfs/)                                                                             |
+| VFS mirror API                 | [`app/api/vfs/mirror/route.ts`](./app/api/vfs/mirror/route.ts)                                       |
+| DB schema                      | [`lib/db/schema.ts`](./lib/db/schema.ts)                                                             |
+| PostHog                        | [`lib/analytics/posthog.ts`](./lib/analytics/posthog.ts)                                             |
 
 ---
 
@@ -212,14 +218,14 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### Useful scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Next.js dev server (Turbopack) |
-| `npm run build` / `npm start` | Production build & serve |
-| `npm run seed` | Reseed marketplace demo data |
-| `npm run db:generate` | Generate Drizzle migrations |
-| `npm run db:migrate` | Apply migrations |
-| `npm run check` | Biome check (lint + format write) |
+| Script                        | Purpose                           |
+| ----------------------------- | --------------------------------- |
+| `npm run dev`                 | Next.js dev server (Turbopack)    |
+| `npm run build` / `npm start` | Production build & serve          |
+| `npm run seed`                | Reseed marketplace demo data      |
+| `npm run db:generate`         | Generate Drizzle migrations       |
+| `npm run db:migrate`          | Apply migrations                  |
+| `npm run check`               | Biome check (lint + format write) |
 
 ---
 
