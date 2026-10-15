@@ -171,6 +171,35 @@ export function captureToolCall(base: TraceBase & AgentTraceToolCall): void {
 	});
 }
 
+export function captureDatabaseError(error: unknown): void {
+	capture("database_error", {
+		kind: "database_error",
+		source: "database",
+		message: databaseErrorMessage(error),
+	});
+}
+
+export function captureGenericDatabaseError(): void {
+	capture("database_error", {
+		kind: "database_error",
+		source: "database",
+		message: "Database request failed",
+	});
+}
+
+function databaseErrorMessage(error: unknown): string {
+	if (!(error instanceof Error)) {
+		return "Database request failed";
+	}
+	if (
+		error.name === "DrizzleQueryError" ||
+		error.message.startsWith("Failed query:")
+	) {
+		return "Failed query";
+	}
+	return error.message.slice(0, 300);
+}
+
 /** Best-effort flush for serverless / route end. */
 export async function flushAnalytics(): Promise<void> {
 	const ph = getClient();

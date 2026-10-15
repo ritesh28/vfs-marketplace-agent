@@ -1,22 +1,29 @@
 import { NextResponse } from "next/server";
 
+import { captureDatabaseError, flushAnalytics } from "@/lib/analytics/posthog";
 import { getTableRows, isDbTableName } from "@/lib/db/queries";
+import { AppError, errorResponse } from "@/lib/errors";
+
+function fail(error: AppError) {
+	const { status, body } = errorResponse(error);
+	return NextResponse.json(body, { status });
+}
 
 export async function GET(request: Request) {
 	const { searchParams } = new URL(request.url);
 	const table = searchParams.get("table");
 
 	if (!table) {
-		return NextResponse.json(
-			{ error: "Missing required query parameter: table" },
-			{ status: 400 },
+		return fail(
+			new AppError("invalid", {
+				message: "Missing required query parameter: table",
+			}),
 		);
 	}
 
 	if (!isDbTableName(table)) {
-		return NextResponse.json(
-			{ error: `Unknown table: ${table}` },
-			{ status: 400 },
+		return fail(
+			new AppError("invalid", { message: `Unknown table: ${table}` }),
 		);
 	}
 
@@ -24,8 +31,8 @@ export async function GET(request: Request) {
 		const rows = await getTableRows(table);
 		return NextResponse.json({ table, rows });
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to fetch rows";
-		return NextResponse.json({ error: message }, { status: 500 });
+		captureDatabaseError(error);
+		await flushAnalytics();
+		return fail(new AppError("internal", { source: "database" }));
 	}
 }

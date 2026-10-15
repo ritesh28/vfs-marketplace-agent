@@ -19,12 +19,24 @@ function createDb() {
 	return drizzle(client, { schema });
 }
 
+type Database = ReturnType<typeof createDb>;
+
 const globalForDb = globalThis as typeof globalThis & {
-	__vfsMarketplaceDb?: ReturnType<typeof createDb>;
+	__vfsMarketplaceDb?: Database;
 };
 
-export const db = globalForDb.__vfsMarketplaceDb ?? createDb();
-
-if (process.env.NODE_ENV !== "production") {
-	globalForDb.__vfsMarketplaceDb = db;
+/** First query creates the pool, so a missing `DATABASE_URL` throws inside the route handler. */
+function getDb(): Database {
+	if (!globalForDb.__vfsMarketplaceDb) {
+		globalForDb.__vfsMarketplaceDb = createDb();
+	}
+	return globalForDb.__vfsMarketplaceDb;
 }
+
+export const db: Database = new Proxy({} as Database, {
+	get(_target, prop) {
+		const real = getDb();
+		const value = Reflect.get(real, prop, real);
+		return typeof value === "function" ? value.bind(real) : value;
+	},
+});
