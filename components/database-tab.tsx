@@ -23,7 +23,6 @@ export function DatabaseTab() {
 	const [table, setTable] = useState<string>("");
 	const [rows, setRows] = useState<Record<string, unknown>[]>([]);
 	const [columns, setColumns] = useState<string[]>([]);
-	const [tablesError, setTablesError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loadingTables, setLoadingTables] = useState(true);
 	const [loadingRows, setLoadingRows] = useState(false);
@@ -44,7 +43,7 @@ export function DatabaseTab() {
 
 		async function loadTables() {
 			setLoadingTables(true);
-			setTablesError(null);
+			setError(null);
 
 			try {
 				const response = await fetch("/api/db/tables");
@@ -59,7 +58,7 @@ export function DatabaseTab() {
 				setTable((current) => current || nextTables[0] || "");
 			} catch (loadError) {
 				if (!cancelled) {
-					setTablesError(requestErrorMessage(loadError));
+					setError(requestErrorMessage(loadError));
 				}
 			} finally {
 				if (!cancelled) {
@@ -84,13 +83,7 @@ export function DatabaseTab() {
 				const response = await fetch(
 					`/api/db/rows?table=${encodeURIComponent(selectedTable)}`,
 				);
-				const data = (await response.json()) as RowsResponse & {
-					error?: string;
-				};
-
-				if (!response.ok) {
-					throw new Error(data.error ?? "Failed to load rows");
-				}
+				const data = await readJson<RowsResponse>(response);
 
 				if (signal?.cancelled) {
 					return;
@@ -101,11 +94,7 @@ export function DatabaseTab() {
 				setColumns(nextRows[0] ? Object.keys(nextRows[0]) : []);
 			} catch (loadError) {
 				if (!signal?.cancelled) {
-					setError(
-						loadError instanceof Error
-							? loadError.message
-							: "Failed to load rows",
-					);
+					setError(requestErrorMessage(loadError));
 					setRows([]);
 					setColumns([]);
 				}
@@ -154,18 +143,12 @@ export function DatabaseTab() {
 				</SelectContent>
 			</Select>
 
-			{tablesError ? (
-				<ErrorNotice
-					message={tablesError}
-					onRetry={() => setRefreshToken((current) => current + 1)}
-					retrying={loadingTables}
-				/>
-			) : null}
-
 			{error ? (
-				<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
-					{error}
-				</div>
+				<ErrorNotice
+					message={error}
+					onRetry={() => setRefreshToken((current) => current + 1)}
+					retrying={loadingTables || loadingRows}
+				/>
 			) : null}
 
 			<div className="min-h-0 flex-1 overflow-hidden rounded-md border">
