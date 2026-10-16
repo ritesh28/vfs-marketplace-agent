@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ErrorNotice } from "@/components/error-notice";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,6 +102,11 @@ export function ChatPanel() {
 
 	const busy = status === "submitted" || status === "streaming";
 
+	const lastUserMessage = [...messages]
+		.reverse()
+		.find((message) => message.role === "user");
+	const retryText = lastUserMessage ? messageText(lastUserMessage).trim() : "";
+
 	async function handleSend() {
 		const text = draft.trim();
 		if (!canSend || busy || !session || !text) {
@@ -109,6 +115,14 @@ export function ChatPanel() {
 		clearError();
 		setDraft("");
 		await sendMessage({ text });
+	}
+
+	async function handleRetry() {
+		if (!retryText || busy || !session) {
+			return;
+		}
+		clearError();
+		await sendMessage({ text: retryText });
 	}
 
 	let emptyHint =
@@ -147,9 +161,11 @@ export function ChatPanel() {
 						))
 					)}
 					{error ? (
-						<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
-							{error.message}
-						</div>
+						<ErrorNotice
+							message={error.message}
+							onRetry={retryText ? () => void handleRetry() : undefined}
+							retrying={busy}
+						/>
 					) : null}
 				</div>
 			</ScrollArea>

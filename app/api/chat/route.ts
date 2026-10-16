@@ -7,7 +7,6 @@ import {
 	streamText,
 	type UIMessage,
 } from "ai";
-import { NextResponse } from "next/server";
 
 import { checkUserMessage } from "@/lib/agent/guardrails";
 import { buildSystemPrompt } from "@/lib/agent/instructions";
@@ -24,10 +23,14 @@ import {
 	captureToolCall,
 	flushAnalytics,
 } from "@/lib/analytics/posthog";
+import { jsonError, logServerError } from "@/lib/api-error";
+import {
+	MODEL_REQUEST_FAILED_MESSAGE,
+	UNEXPECTED_ERROR_MESSAGE,
+} from "@/lib/error-messages";
 import { isAiProvider } from "@/lib/provider-storage";
 import { type AiProvider, isRole } from "@/lib/types";
 import { VfsSessionScope } from "@/lib/vfs/session";
-import { VfsStore } from "@/lib/vfs/store";
 import type { VfsSession } from "@/lib/vfs/types";
 
 type ChatBody = {
@@ -105,31 +108,28 @@ export async function POST(request: Request) {
 	try {
 		body = (await request.json()) as ChatBody;
 	} catch {
-		return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+		return jsonError(400, "Invalid JSON body");
 	}
 
 	const providerRaw = body.provider;
 	if (!providerRaw || !isAiProvider(providerRaw)) {
-		return NextResponse.json(
-			{ error: "Missing or invalid provider" },
-			{ status: 400 },
-		);
+		return jsonError(400, "Missing or invalid provider");
 	}
 	const provider: AiProvider = providerRaw;
 	const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
 	if (!apiKey) {
-		return NextResponse.json({ error: "Missing apiKey" }, { status: 400 });
+		return jsonError(400, "Missing apiKey");
 	}
 
 	const sessionOrError = parseSession(body.session);
 	if ("error" in sessionOrError) {
-		return NextResponse.json({ error: sessionOrError.error }, { status: 400 });
+		return jsonError(400, sessionOrError.error);
 	}
 	const session = sessionOrError;
 
 	const messages = Array.isArray(body.messages) ? body.messages : [];
 	if (messages.length === 0) {
-		return NextResponse.json({ error: "Missing messages" }, { status: 400 });
+		return jsonError(400, "Missing messages");
 	}
 
 	const userText = extractLatestUserText(messages);
@@ -154,6 +154,7 @@ export async function POST(request: Request) {
 
 	try {
 		const system = await buildSystemPrompt(session);
+		const { VfsStore } = await import("@/lib/vfs/store");
 		const store = VfsStore.forSession(session);
 		const tools = createAgentTools(store.getController(), (event) => {
 			toolCalls.push(event);
@@ -195,14 +196,11 @@ export async function POST(request: Request) {
 					error instanceof Error ? error.message : "Chat stream failed";
 				captureChatError({ ...traceBase, message });
 				void flushAnalytics();
-				return message;
+				return MODEL_REQUEST_FAILED_MESSAGE;
 			},
 		});
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to start chat";
-		captureChatError({ ...traceBase, message });
-		await flushAnalytics();
-		return NextResponse.json({ error: message }, { status: 500 });
+		await logServerError("Failed to start chat", error);
+		return jsonError(500, UNEXPECTED_ERROR_MESSAGE);
 	}
 }
