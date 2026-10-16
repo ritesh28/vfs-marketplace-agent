@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import {
 	Select,
 	SelectContent,
@@ -17,31 +16,12 @@ type RowsResponse = {
 	rows: Record<string, unknown>[];
 };
 
-type LoadError = {
-	message: string;
-	retryable: boolean;
-};
-
-const GENERIC_ERROR: LoadError = {
-	message: "Something went wrong. Try again.",
-	retryable: true,
-};
-
-const ROWS_ERROR: LoadError = {
-	message: "Could not load rows for this table. Try again.",
-	retryable: true,
-};
-
-function reportDatabaseError() {
-	void fetch("/api/db/error", { method: "POST" }).catch(() => undefined);
-}
-
 export function DatabaseTab() {
 	const [tables, setTables] = useState<string[]>([]);
 	const [table, setTable] = useState<string>("");
 	const [rows, setRows] = useState<Record<string, unknown>[]>([]);
 	const [columns, setColumns] = useState<string[]>([]);
-	const [error, setError] = useState<LoadError | null>(null);
+	const [error, setError] = useState<string | null>(null);
 	const [loadingTables, setLoadingTables] = useState(true);
 	const [loadingRows, setLoadingRows] = useState(false);
 	const [refreshToken, setRefreshToken] = useState(0);
@@ -65,10 +45,14 @@ export function DatabaseTab() {
 
 			try {
 				const response = await fetch("/api/db/tables");
+				const data = (await response.json()) as {
+					tables?: string[];
+					error?: string;
+				};
+
 				if (!response.ok) {
-					throw new Error("database");
+					throw new Error(data.error ?? "Failed to load tables");
 				}
-				const data = (await response.json()) as { tables?: string[] };
 
 				if (cancelled) {
 					return;
@@ -77,10 +61,13 @@ export function DatabaseTab() {
 				const nextTables = data.tables ?? [];
 				setTables(nextTables);
 				setTable((current) => current || nextTables[0] || "");
-			} catch {
+			} catch (loadError) {
 				if (!cancelled) {
-					reportDatabaseError();
-					setError(GENERIC_ERROR);
+					setError(
+						loadError instanceof Error
+							? loadError.message
+							: "Failed to load tables",
+					);
 				}
 			} finally {
 				if (!cancelled) {
@@ -105,10 +92,13 @@ export function DatabaseTab() {
 				const response = await fetch(
 					`/api/db/rows?table=${encodeURIComponent(selectedTable)}`,
 				);
+				const data = (await response.json()) as RowsResponse & {
+					error?: string;
+				};
+
 				if (!response.ok) {
-					throw new Error(ROWS_ERROR.message);
+					throw new Error(data.error ?? "Failed to load rows");
 				}
-				const data = (await response.json()) as RowsResponse;
 
 				if (signal?.cancelled) {
 					return;
@@ -117,10 +107,13 @@ export function DatabaseTab() {
 				const nextRows = data.rows ?? [];
 				setRows(nextRows);
 				setColumns(nextRows[0] ? Object.keys(nextRows[0]) : []);
-			} catch {
+			} catch (loadError) {
 				if (!signal?.cancelled) {
-					reportDatabaseError();
-					setError(ROWS_ERROR);
+					setError(
+						loadError instanceof Error
+							? loadError.message
+							: "Failed to load rows",
+					);
 					setRows([]);
 					setColumns([]);
 				}
@@ -170,18 +163,8 @@ export function DatabaseTab() {
 			</Select>
 
 			{error ? (
-				<div className="flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
-					<span>{error.message}</span>
-					{error.retryable ? (
-						<Button
-							onClick={() => setRefreshToken((current) => current + 1)}
-							size="xs"
-							type="button"
-							variant="outline"
-						>
-							Retry
-						</Button>
-					) : null}
+				<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
+					{error}
 				</div>
 			) : null}
 
