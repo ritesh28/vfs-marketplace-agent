@@ -160,12 +160,14 @@ export function captureServerError(input: {
 	scope: string;
 	message: string;
 	stack?: string;
+	digest?: string;
 }): void {
 	capture("server_error", {
 		kind: "server_error",
 		scope: input.scope,
 		message: input.message,
 		stack: input.stack,
+		digest: input.digest,
 	});
 }
 
