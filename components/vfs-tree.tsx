@@ -4,8 +4,9 @@ import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
 import { BracesIcon, FileIcon, FolderIcon, FolderOpenIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ErrorNotice } from "@/components/error-notice";
 import { Tree, TreeItem, TreeItemLabel } from "@/components/reui/tree";
-
+import { readJson, requestErrorMessage } from "@/lib/read-json";
 import { useSessionStore } from "@/lib/session-store";
 import type { VfsListEntry } from "@/lib/vfs/types";
 
@@ -102,6 +103,8 @@ export function VfsTree({
 	const [revision, setRevision] = useState<string>("");
 	const [treeKey, setTreeKey] = useState(0);
 	const [error, setError] = useState<string | null>(null);
+	const [retryToken, setRetryToken] = useState(0);
+	const [retrying, setRetrying] = useState(false);
 
 	const ready = Boolean(role && personaId && (role !== "SUPPORT" || ticketId));
 	const revisionRef = useRef(revision);
@@ -119,14 +122,12 @@ export function VfsTree({
 		const params = sessionQuery(role, personaId, ticketId);
 
 		async function pullMirror(forceKeyBump: boolean) {
+			if (forceKeyBump) {
+				setRetrying(true);
+			}
 			try {
 				const res = await fetch(`/api/vfs/mirror?${params.toString()}`);
-				const data = (await res.json()) as MirrorSnapshot & {
-					error?: string;
-				};
-				if (!res.ok) {
-					throw new Error(data.error ?? "Failed to load VFS mirror");
-				}
+				const data = await readJson<MirrorSnapshot>(res);
 				if (cancelled) return;
 
 				setError(null);
@@ -141,7 +142,11 @@ export function VfsTree({
 				setTreeKey((k) => k + 1);
 			} catch (err) {
 				if (!cancelled) {
-					setError(err instanceof Error ? err.message : "VFS mirror failed");
+					setError(requestErrorMessage(err));
+				}
+			} finally {
+				if (forceKeyBump && !cancelled) {
+					setRetrying(false);
 				}
 			}
 		}
@@ -155,7 +160,7 @@ export function VfsTree({
 			cancelled = true;
 			clearInterval(timer);
 		};
-	}, [ready, role, personaId, ticketId]);
+	}, [ready, role, personaId, ticketId, retryToken]);
 
 	function openFile(path: string, hydrated: boolean | undefined) {
 		if (!role || !personaId) return;
@@ -173,31 +178,31 @@ export function VfsTree({
 		const params = sessionQuery(role, personaId, ticketId);
 		params.set("path", path);
 		void (async () => {
-			const res = await fetch(`/api/vfs/mirror?${params.toString()}`);
-			const data = (await res.json()) as {
-				hydrated?: boolean;
-				content?: string;
-				error?: string;
-				path?: string;
-			};
-			if (!res.ok) {
-				setError(data.error ?? "Failed to peek file");
-				return;
-			}
-			if (!data.hydrated) {
+			try {
+				const res = await fetch(`/api/vfs/mirror?${params.toString()}`);
+				const data = await readJson<{
+					hydrated?: boolean;
+					content?: string;
+					path?: string;
+				}>(res);
+				setError(null);
+				if (!data.hydrated) {
+					onFileOpen?.({
+						path: data.path ?? path,
+						hydrated: false,
+						content:
+							"Not hydrated yet.\n\nThis VFS panel is a read-only mirror of what the agent has requested. Open this path with the agent (list_directory / read) to load it here.",
+					});
+					return;
+				}
 				onFileOpen?.({
 					path: data.path ?? path,
-					hydrated: false,
-					content:
-						"Not hydrated yet.\n\nThis VFS panel is a read-only mirror of what the agent has requested. Open this path with the agent (list_directory / read) to load it here.",
+					hydrated: true,
+					content: data.content ?? "",
 				});
-				return;
+			} catch (loadError) {
+				setError(requestErrorMessage(loadError));
 			}
-			onFileOpen?.({
-				path: data.path ?? path,
-				hydrated: true,
-				content: data.content ?? "",
-			});
 		})();
 	}
 
@@ -215,7 +220,13 @@ export function VfsTree({
 
 	return (
 		<div className="flex flex-col gap-2 p-2">
-			{error ? <p className="px-2 text-destructive text-xs">{error}</p> : null}
+			{error ? (
+				<ErrorNotice
+					message={error}
+					onRetry={() => setRetryToken((current) => current + 1)}
+					retrying={retrying}
+				/>
+			) : null}
 			{!hasAnyChildren ? (
 				<p className="px-2 text-muted-foreground text-xs">
 					Loading session folders…

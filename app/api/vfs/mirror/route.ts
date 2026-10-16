@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { jsonError, logServerError } from "@/lib/api-error";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/error-messages";
 import { isRole } from "@/lib/types";
 import { VfsSessionScope } from "@/lib/vfs/session";
-import { VfsStore } from "@/lib/vfs/store";
 import type { VfsSession } from "@/lib/vfs/types";
 
 function parseVfsMirrorRequest(url: URL): VfsSession | { error: string } {
@@ -41,10 +42,11 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const sessionOrError = parseVfsMirrorRequest(url);
 	if ("error" in sessionOrError) {
-		return NextResponse.json({ error: sessionOrError.error }, { status: 400 });
+		return jsonError(400, sessionOrError.error);
 	}
 
 	try {
+		const { VfsStore } = await import("@/lib/vfs/store");
 		const store = VfsStore.forSession(sessionOrError);
 		const path = url.searchParams.get("path");
 		if (path) {
@@ -55,8 +57,7 @@ export async function GET(request: Request) {
 		}
 		return NextResponse.json(await store.peekMirror());
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to mirror VFS";
-		return NextResponse.json({ error: message }, { status: 500 });
+		await logServerError("Failed to mirror VFS", error);
+		return jsonError(500, UNEXPECTED_ERROR_MESSAGE);
 	}
 }

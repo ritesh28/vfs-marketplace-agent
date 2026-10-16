@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { jsonError, logServerError } from "@/lib/api-error";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/error-messages";
 import { isRole } from "@/lib/types";
 import { VfsPath } from "@/lib/vfs/paths";
 import { VfsSessionScope } from "@/lib/vfs/session";
-import { VfsStore } from "@/lib/vfs/store";
 import type { VfsSession } from "@/lib/vfs/types";
 
 function parseVfsReadRequest(url: URL): VfsSession | { error: string } {
@@ -38,32 +39,26 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const sessionOrError = parseVfsReadRequest(url);
 	if ("error" in sessionOrError) {
-		return NextResponse.json({ error: sessionOrError.error }, { status: 400 });
+		return jsonError(400, sessionOrError.error);
 	}
 
 	const pathParam = url.searchParams.get("path");
 	if (!pathParam) {
-		return NextResponse.json(
-			{ error: "Missing required query parameter: path" },
-			{ status: 400 },
-		);
+		return jsonError(400, "Missing required query parameter: path");
 	}
 
 	const path = VfsPath.normalize(pathParam);
 
 	try {
+		const { VfsStore } = await import("@/lib/vfs/store");
 		const store = VfsStore.forSession(sessionOrError);
 		const content = await store.readFile(path);
 		if (content === null) {
-			return NextResponse.json(
-				{ error: `File not found or not visible: ${path}` },
-				{ status: 404 },
-			);
+			return jsonError(404, `File not found or not visible: ${path}`);
 		}
 		return NextResponse.json({ path, content });
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to read VFS file";
-		return NextResponse.json({ error: message }, { status: 500 });
+		await logServerError("Failed to read VFS file", error);
+		return jsonError(500, UNEXPECTED_ERROR_MESSAGE);
 	}
 }

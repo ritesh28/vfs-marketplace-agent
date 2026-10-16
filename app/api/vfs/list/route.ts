@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { jsonError, logServerError } from "@/lib/api-error";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/error-messages";
 import { isRole } from "@/lib/types";
 import { VfsPath } from "@/lib/vfs/paths";
 import { VfsSessionScope } from "@/lib/vfs/session";
-import { VfsStore } from "@/lib/vfs/store";
 import type { VfsSession } from "@/lib/vfs/types";
 
 function parseVfsListRequest(url: URL): VfsSession | { error: string } {
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
 	const url = new URL(request.url);
 	const sessionOrError = parseVfsListRequest(url);
 	if ("error" in sessionOrError) {
-		return NextResponse.json({ error: sessionOrError.error }, { status: 400 });
+		return jsonError(400, sessionOrError.error);
 	}
 
 	const path =
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
 	const reset = url.searchParams.get("reset") === "1";
 
 	try {
+		const { VfsStore } = await import("@/lib/vfs/store");
 		if (reset) {
 			VfsStore.reset(sessionOrError);
 		}
@@ -54,8 +56,7 @@ export async function GET(request: Request) {
 		const entries = await store.listChildren(path);
 		return NextResponse.json({ path, entries });
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to list VFS path";
-		return NextResponse.json({ error: message }, { status: 500 });
+		await logServerError("Failed to list VFS path", error);
+		return jsonError(500, UNEXPECTED_ERROR_MESSAGE);
 	}
 }
