@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ErrorNotice } from "@/components/error-notice";
 import {
 	Select,
 	SelectContent,
@@ -9,6 +10,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { readJson, requestErrorMessage } from "@/lib/read-json";
 import { useSessionStore } from "@/lib/session-store";
 import {
 	type Persona,
@@ -26,6 +28,7 @@ export function PersonaPicker() {
 	const [loadingPersonas, setLoadingPersonas] = useState(false);
 	const [loadingTickets, setLoadingTickets] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [retryToken, setRetryToken] = useState(0);
 
 	useEffect(() => {
 		if (!role) {
@@ -48,33 +51,20 @@ export function PersonaPicker() {
 				const response = await fetch(
 					`/api/personas?role=${encodeURIComponent(selectedRole)}`,
 				);
-				const data = (await response.json()) as Persona[] | { error?: string };
-
-				if (!response.ok) {
-					throw new Error(
-						!Array.isArray(data) && data.error
-							? data.error
-							: "Failed to load personas",
-					);
-				}
+				const data = await readJson<Persona[]>(response);
 
 				if (!cancelled) {
-					const next = Array.isArray(data) ? data : [];
-					setPersonas(next);
+					setPersonas(data);
 
 					// Support has a single DB persona — auto-select from API, not seed IDs.
-					if (selectedRole === "SUPPORT" && next[0]) {
-						setPersonaId(next[0].id);
+					if (selectedRole === "SUPPORT" && data[0]) {
+						setPersonaId(data[0].id);
 					}
 				}
 			} catch (loadError) {
 				if (!cancelled) {
 					setPersonas([]);
-					setError(
-						loadError instanceof Error
-							? loadError.message
-							: "Failed to load personas",
-					);
+					setError(requestErrorMessage(loadError));
 				}
 			} finally {
 				if (!cancelled) {
@@ -90,7 +80,7 @@ export function PersonaPicker() {
 		};
 		// setPersonaId is stable enough for this effect; role is the real trigger.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [role]);
+	}, [role, retryToken]);
 
 	useEffect(() => {
 		if (role !== "SUPPORT") {
@@ -106,29 +96,15 @@ export function PersonaPicker() {
 
 			try {
 				const response = await fetch("/api/tickets");
-				const data = (await response.json()) as
-					| TicketSummary[]
-					| { error?: string };
-
-				if (!response.ok) {
-					throw new Error(
-						!Array.isArray(data) && data.error
-							? data.error
-							: "Failed to load tickets",
-					);
-				}
+				const data = await readJson<TicketSummary[]>(response);
 
 				if (!cancelled) {
-					setTickets(Array.isArray(data) ? data : []);
+					setTickets(data);
 				}
 			} catch (loadError) {
 				if (!cancelled) {
 					setTickets([]);
-					setError(
-						loadError instanceof Error
-							? loadError.message
-							: "Failed to load tickets",
-					);
+					setError(requestErrorMessage(loadError));
 				}
 			} finally {
 				if (!cancelled) {
@@ -142,7 +118,7 @@ export function PersonaPicker() {
 		return () => {
 			cancelled = true;
 		};
-	}, [role]);
+	}, [role, retryToken]);
 
 	const supportPersona = personas[0];
 
@@ -228,7 +204,13 @@ export function PersonaPicker() {
 				</Select>
 			) : null}
 
-			{error ? <span className="text-destructive text-xs">{error}</span> : null}
+			{error ? (
+				<ErrorNotice
+					message={error}
+					onRetry={() => setRetryToken((current) => current + 1)}
+					retrying={loadingPersonas || loadingTickets}
+				/>
+			) : null}
 		</div>
 	);
 }

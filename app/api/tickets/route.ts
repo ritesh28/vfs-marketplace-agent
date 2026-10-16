@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { listTicketSummaries } from "@/lib/db/queries";
+import { jsonError, logServerError } from "@/lib/api-error";
+import { UNEXPECTED_ERROR_MESSAGE } from "@/lib/error-messages";
 
 export async function GET() {
 	try {
+		const { listTicketSummaries } = await import("@/lib/db/queries");
 		const tickets = await listTicketSummaries();
 		return NextResponse.json(tickets);
 	} catch (error) {
-		const message =
-			error instanceof Error ? error.message : "Failed to list tickets";
-		return NextResponse.json({ error: message }, { status: 500 });
+		await logServerError("Failed to list tickets", error);
+		return jsonError(500, UNEXPECTED_ERROR_MESSAGE);
 	}
 }
