@@ -156,6 +156,19 @@ export function captureChatError(
 	});
 }
 
+export function captureServerError(input: {
+	scope: string;
+	message: string;
+	stack?: string;
+}): void {
+	capture("server_error", {
+		kind: "server_error",
+		scope: input.scope,
+		message: input.message,
+		stack: input.stack,
+	});
+}
+
 export function captureToolCall(base: TraceBase & AgentTraceToolCall): void {
 	capture("agent_tool_call", {
 		kind: "agent_tool_call",

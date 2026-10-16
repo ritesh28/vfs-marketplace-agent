@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { ErrorNotice } from "@/components/error-notice";
 import {
 	Select,
 	SelectContent,
@@ -10,6 +11,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { DB_REFRESH_EVENT } from "@/lib/client-events";
+import { readJson, requestErrorMessage } from "@/lib/read-json";
 
 type RowsResponse = {
 	table: string;
@@ -21,6 +23,7 @@ export function DatabaseTab() {
 	const [table, setTable] = useState<string>("");
 	const [rows, setRows] = useState<Record<string, unknown>[]>([]);
 	const [columns, setColumns] = useState<string[]>([]);
+	const [tablesError, setTablesError] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loadingTables, setLoadingTables] = useState(true);
 	const [loadingRows, setLoadingRows] = useState(false);
@@ -41,18 +44,11 @@ export function DatabaseTab() {
 
 		async function loadTables() {
 			setLoadingTables(true);
-			setError(null);
+			setTablesError(null);
 
 			try {
 				const response = await fetch("/api/db/tables");
-				const data = (await response.json()) as {
-					tables?: string[];
-					error?: string;
-				};
-
-				if (!response.ok) {
-					throw new Error(data.error ?? "Failed to load tables");
-				}
+				const data = await readJson<{ tables?: string[] }>(response);
 
 				if (cancelled) {
 					return;
@@ -63,11 +59,7 @@ export function DatabaseTab() {
 				setTable((current) => current || nextTables[0] || "");
 			} catch (loadError) {
 				if (!cancelled) {
-					setError(
-						loadError instanceof Error
-							? loadError.message
-							: "Failed to load tables",
-					);
+					setTablesError(requestErrorMessage(loadError));
 				}
 			} finally {
 				if (!cancelled) {
@@ -161,6 +153,14 @@ export function DatabaseTab() {
 					))}
 				</SelectContent>
 			</Select>
+
+			{tablesError ? (
+				<ErrorNotice
+					message={tablesError}
+					onRetry={() => setRefreshToken((current) => current + 1)}
+					retrying={loadingTables}
+				/>
+			) : null}
 
 			{error ? (
 				<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive text-sm">
